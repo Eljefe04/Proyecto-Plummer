@@ -1,0 +1,12 @@
+{
+  "name": "proyecto-plummer",
+  "version": "1.0.0",
+  "description": "Sistema Integral de Administracion Hospitalaria - Mayo Clinic Buenos Aires",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "seed": "cd server && npm run seed"
+  }
+}

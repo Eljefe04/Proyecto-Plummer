@@ -1,0 +1,62 @@
+.modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 30, 46, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  z-index: 100;
+  animation: modal-fade 160ms ease-out;
+}
+
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal__caja {
+  background: #fff;
+  border-radius: var(--radio-lg);
+  width: 100%;
+  box-shadow: var(--sombra-media);
+  animation: modal-subir 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes modal-subir {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--borde-suave);
+}
+
+.modal__header h3 {
+  font-size: 19px;
+  color: var(--plummer-azul-profundo);
+}
+
+.modal__cerrar {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--texto-secundario);
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+}
+
+.modal__cerrar:hover {
+  background: var(--fondo-app);
+  color: var(--texto-principal);
+}
+
+.modal__contenido {
+  padding: 22px 24px 26px;
+}
