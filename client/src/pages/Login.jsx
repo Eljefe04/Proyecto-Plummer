@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../api';
+import { api, despertarServidor } from '../api';
 import LogoPlummer from '../components/LogoPlummer';
 import HistoricoMedico from '../components/HistoricoMedico';
 import './Login.css';
@@ -56,7 +56,7 @@ function Icono({ tipo }) {
 }
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, avisoSesion, limpiarAviso } = useAuth();
   const navigate = useNavigate();
 
   const [rolSeleccionado, setRolSeleccionado] = useState('administrador');
@@ -66,9 +66,21 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [plummer, setPlummer] = useState(null);
+
+  // Estado del servidor: en Render gratuito el servicio se duerme a los
+  // ~15 min y tarda cerca de 50 s en despertar (y Neon otro tanto). Sin
+  // avisar, el boton de ingresar parecia colgado y la web rota.
+  const [servidor, setServidor] = useState({ estado: 'conectando', intento: 1, total: 12 });
 
   useEffect(() => {
-    api.get('/auth/especialidades').then(setEspecialidades).catch(() => {});
+    let vivo = true;
+    despertarServidor((p) => vivo && setServidor(p)).then((ok) => {
+      if (!vivo || !ok) return;
+      api.get('/auth/especialidades').then(setEspecialidades).catch(() => {});
+      api.get('/medicos-historicos/plummer').then(setPlummer).catch(() => {});
+    });
+    return () => { vivo = false; };
   }, []);
 
   useEffect(() => {
@@ -80,8 +92,17 @@ export default function Login() {
   async function manejarEnvio(e) {
     e.preventDefault();
     setError('');
+    limpiarAviso();
     setCargando(true);
     try {
+      // Si el servicio todavia no desperto, lo esperamos antes de mandar
+      // las credenciales, mostrando el progreso en pantalla.
+      if (servidor.estado !== 'listo') {
+        const despierto = await despertarServidor(setServidor);
+        if (!despierto) {
+          throw new Error('El servidor no responde. Esperá unos segundos y reintentá.');
+        }
+      }
       const datosUsuario = await login({
         rol: rolSeleccionado,
         especialidad: rolSeleccionado === 'medico' ? especialidad : undefined,
@@ -114,7 +135,7 @@ export default function Login() {
     <div className="login">
       <div className="login__panel-institucional">
         <div className="login__marca">
-          <LogoPlummer size={52} />
+          <LogoPlummer size={52} animado />
           <div>
             <p className="login__marca-proyecto">Proyecto Plummer</p>
             <p className="login__marca-institucion">Mayo Clinic Buenos Aires</p>
@@ -130,14 +151,49 @@ export default function Login() {
 
         <div className="login__pulso" aria-hidden="true">
           <svg viewBox="0 0 400 80" width="100%" height="80" preserveAspectRatio="none">
+            {/* Trazo de fondo */}
             <polyline
               points="0,40 60,40 80,10 100,70 120,40 260,40 280,15 300,65 320,40 400,40"
               fill="none"
-              stroke="rgba(244,247,250,0.35)"
+              stroke="rgba(244,247,250,0.16)"
               strokeWidth="2.5"
+            />
+            {/* Trazo que se dibuja de lado a lado, en bucle */}
+            <polyline
+              points="0,40 60,40 80,10 100,70 120,40 260,40 280,15 300,65 320,40 400,40"
+              fill="none"
+              stroke="#2fd39e"
+              strokeWidth="2.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                strokeDasharray: 620,
+                strokeDashoffset: 620,
+                animation: 'trazo-ecg 3.4s cubic-bezier(0.45,0,0.25,1) infinite',
+                '--largo-trazo': 620,
+              }}
             />
           </svg>
         </div>
+
+        {plummer && (
+          <div className="login__plummer surgir">
+            <img
+              className="login__plummer-foto"
+              src={plummer.imagen}
+              alt={plummer.nombre}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+            <div>
+              <p className="login__plummer-nombre">{plummer.nombre} <span>{plummer.anios}</span></p>
+              <p className="login__plummer-bio">
+                En 1907, en la Mayo Clinic, reemplazó los cuadernos que cada médico llevaba por
+                separado por un expediente único por paciente. Esa idea —la historia clínica
+                unificada— da nombre a este sistema.
+              </p>
+            </div>
+          </div>
+        )}
 
         <p className="login__footer-institucional">© 2026 Mayo Clinic Buenos Aires — Argentina</p>
       </div>
@@ -146,6 +202,36 @@ export default function Login() {
         <div className="login__tarjeta-acceso">
           <h2>Acceso al Sistema</h2>
           <p className="login__subtitulo">Seleccione su rol e ingrese sus credenciales</p>
+
+          {avisoSesion && (
+            <div className="login__aviso surgir" role="status">{avisoSesion}</div>
+          )}
+
+          {servidor.estado !== 'listo' && (
+            <div className="login__despertando surgir" role="status">
+              <span className="login__despertando-punto" />
+              <div>
+                <strong>
+                  {servidor.estado === 'falla'
+                    ? 'El servidor no responde'
+                    : 'Despertando el servidor…'}
+                </strong>
+                <p>
+                  {servidor.estado === 'falla'
+                    ? 'Reintentá en unos segundos.'
+                    : 'El servicio estaba en reposo. Suele tardar hasta un minuto la primera vez.'}
+                </p>
+                {servidor.estado !== 'falla' && (
+                  <div className="login__barra">
+                    <div
+                      className="login__barra-relleno"
+                      style={{ width: `${Math.min(100, (servidor.intento / servidor.total) * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="login__grid-roles" role="radiogroup" aria-label="Rol de acceso">
             {ROLES.map((r) => (
@@ -216,7 +302,9 @@ export default function Login() {
             {error && <p className="login__error" role="alert">{error}</p>}
 
             <button type="submit" className="login__boton-ingresar" disabled={cargando}>
-              {cargando ? 'Ingresando…' : 'Ingresar'}
+              {cargando
+                ? (servidor.estado === 'listo' ? 'Ingresando…' : 'Esperando al servidor…')
+                : 'Ingresar'}
             </button>
           </form>
         </div>

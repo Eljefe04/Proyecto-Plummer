@@ -32,7 +32,14 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { origin: '*' }, // red local del colegio: se permite cualquier origen
+  cors: { origin: '*' },
+  // FLUIDEZ: por defecto socket.io arranca con HTTP long-polling y recien
+  // despues intenta subir a WebSocket. Detras del proxy de Render esa subida
+  // a veces no prospera y el sistema queda en polling, con varios segundos
+  // de retraso en cada evento. Forzamos WebSocket directo.
+  transports: ['websocket', 'polling'],
+  pingInterval: 20000,
+  pingTimeout: 25000,
 });
 
 app.use(cors());
@@ -64,6 +71,23 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, servicio: 'Proyecto Plummer', hora: new Date().toISOString() });
 });
 
+// Ping liviano que NO toca la base: sirve para saber si el servicio de
+// Render ya desperto, antes de intentar el login.
+app.get('/api/ping', (req, res) => res.json({ ok: true, ts: Date.now() }));
+
+// Despierta tambien a Neon (que se autosuspende en el plan gratuito)
+// haciendo una consulta minima. El login lo llama antes de enviar
+// credenciales, asi la espera se muestra explicada en pantalla.
+app.get('/api/despertar', async (req, res) => {
+  const t0 = Date.now();
+  try {
+    await db.prepare('SELECT 1 AS ok').get();
+    res.json({ ok: true, base: 'despierta', ms: Date.now() - t0 });
+  } catch (err) {
+    res.status(503).json({ ok: false, base: 'durmiendo', detalle: err.message });
+  }
+});
+
 // Middleware de manejo de errores centralizado: captura todo lo que
 // las rutas pasan con next(err) y devuelve un JSON prolijo en vez de
 // que Express devuelva HTML de error por defecto.
@@ -79,9 +103,12 @@ app.use((err, req, res, next) => {
 // sincronizacion en tiempo real entre terminales.
 // ------------------------------------------------------------
 io.on('connection', (socket) => {
-  socket.on('identificarse', (token) => {
-    const sesion = obtenerSesion(token);
-    if (!sesion) return;
+  socket.on('identificarse', async (token) => {
+    const sesion = await obtenerSesion(token);
+    if (!sesion) {
+      socket.emit('sesion_invalida');
+      return;
+    }
 
     socket.join(`rol:${sesion.rol}`);
     if (sesion.medicoId) {

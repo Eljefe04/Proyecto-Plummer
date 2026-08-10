@@ -401,3 +401,97 @@ CREATE INDEX IF NOT EXISTS idx_estudios_lab_estado ON estudios_laboratorio(estad
 CREATE INDEX IF NOT EXISTS idx_estudios_img_estado ON estudios_imagenes(estado);
 CREATE INDEX IF NOT EXISTS idx_notificaciones_rol ON notificaciones(destino_rol, leida);
 CREATE INDEX IF NOT EXISTS idx_auditoria_fecha ON auditoria(creado_en);
+
+
+-- ============================================================
+-- MIGRACIONES v2
+-- ------------------------------------------------------------
+-- Todo lo de abajo es idempotente: se puede ejecutar en cada
+-- arranque sin romper nada. Por eso el sistema se actualiza solo
+-- al redeployar, sin tener que entrar a la consola de Neon.
+-- ============================================================
+
+-- ---------- 1. TABLAS NUEVAS ----------
+
+-- Sesiones persistentes. Antes vivian en un Map() en memoria del
+-- servidor: cuando Render dormia el servicio o se redeployaba, se
+-- perdian todas y los usuarios quedaban trabados.
+CREATE TABLE IF NOT EXISTS sesiones (
+  token TEXT PRIMARY KEY,
+  usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  usuario TEXT NOT NULL,
+  rol TEXT NOT NULL,
+  nombre_completo TEXT NOT NULL,
+  medico_id TEXT,
+  especialidad TEXT,
+  creada_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ultima_actividad TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_sesiones_actividad ON sesiones(ultima_actividad);
+
+-- Resultados de laboratorio estructurados (analito / valor / rango),
+-- en vez de un unico campo de texto libre.
+CREATE TABLE IF NOT EXISTS laboratorio_resultados (
+  id TEXT PRIMARY KEY,
+  estudio_id TEXT NOT NULL REFERENCES estudios_laboratorio(id) ON DELETE CASCADE,
+  analito TEXT NOT NULL,
+  valor TEXT NOT NULL,
+  unidad TEXT,
+  ref_min NUMERIC,
+  ref_max NUMERIC,
+  orden INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_lab_resultados_estudio ON laboratorio_resultados(estudio_id);
+
+-- ---------- 2. COLUMNAS NUEVAS ----------
+
+ALTER TABLE turnos      ADD COLUMN IF NOT EXISTS codigo_videollamada TEXT;
+ALTER TABLE camas       ADD COLUMN IF NOT EXISTS limpieza_desde TIMESTAMPTZ;
+ALTER TABLE pacientes   ADD COLUMN IF NOT EXISTS alta_estimada DATE;
+ALTER TABLE pacientes   ADD COLUMN IF NOT EXISTS medico_a_cargo_id TEXT;
+
+ALTER TABLE recetas     ADD COLUMN IF NOT EXISTS medicamento_id TEXT;
+
+ALTER TABLE derivaciones ADD COLUMN IF NOT EXISTS prioridad TEXT NOT NULL DEFAULT 'normal';
+
+ALTER TABLE estudios_laboratorio ADD COLUMN IF NOT EXISTS origen_modulo TEXT;
+ALTER TABLE estudios_imagenes    ADD COLUMN IF NOT EXISTS origen_modulo TEXT;
+ALTER TABLE estudios_imagenes    ADD COLUMN IF NOT EXISTS indicaciones TEXT;
+ALTER TABLE estudios_imagenes    ADD COLUMN IF NOT EXISTS imagen_datos TEXT;
+
+ALTER TABLE cirugias ADD COLUMN IF NOT EXISTS anestesiologo_id TEXT;
+ALTER TABLE cirugias ADD COLUMN IF NOT EXISTS complejidad TEXT NOT NULL DEFAULT 'media';
+ALTER TABLE cirugias ADD COLUMN IF NOT EXISTS dias_internacion_estimados INTEGER;
+ALTER TABLE cirugias ADD COLUMN IF NOT EXISTS parte_quirurgico TEXT;
+ALTER TABLE cirugias ADD COLUMN IF NOT EXISTS checklist_oms TEXT;
+ALTER TABLE cirugias ADD COLUMN IF NOT EXISTS cama_asignada_id TEXT;
+
+-- ---------- 3. RESTRICCIONES REESCRITAS ----------
+-- Estas son las unicas que modifican algo que ya existia.
+
+-- Cirujanos y anestesiologos como especialidades validas.
+ALTER TABLE medicos DROP CONSTRAINT IF EXISTS medicos_especialidad_check;
+ALTER TABLE medicos ADD CONSTRAINT medicos_especialidad_check
+  CHECK (especialidad IN ('obstetricia','cardiologia','neurologia','pediatria','cirugia','anestesiologia'));
+
+-- Estado 'solicitada': la cirugia que pidio un medico y que Quirofano
+-- todavia no programo.
+ALTER TABLE cirugias DROP CONSTRAINT IF EXISTS cirugias_estado_check;
+ALTER TABLE cirugias ADD CONSTRAINT cirugias_estado_check
+  CHECK (estado IN ('solicitada','programada','en_curso','finalizada','cancelada'));
+
+-- Estados intermedios en laboratorio e imagenes.
+ALTER TABLE estudios_laboratorio DROP CONSTRAINT IF EXISTS estudios_laboratorio_estado_check;
+ALTER TABLE estudios_laboratorio ADD CONSTRAINT estudios_laboratorio_estado_check
+  CHECK (estado IN ('pendiente','muestra_tomada','en_proceso','realizado'));
+
+ALTER TABLE estudios_imagenes DROP CONSTRAINT IF EXISTS estudios_imagenes_estado_check;
+ALTER TABLE estudios_imagenes ADD CONSTRAINT estudios_imagenes_estado_check
+  CHECK (estado IN ('pendiente','en_sala','realizado','informado','entregado'));
+
+-- ---------- 4. INDICES DE APOYO ----------
+CREATE INDEX IF NOT EXISTS idx_turnos_medico_fecha  ON turnos(medico_id, fecha);
+CREATE INDEX IF NOT EXISTS idx_camas_estado         ON camas(estado);
+CREATE INDEX IF NOT EXISTS idx_recetas_estado       ON recetas(estado);
+CREATE INDEX IF NOT EXISTS idx_derivaciones_destino ON derivaciones(destino, estado);
+CREATE INDEX IF NOT EXISTS idx_cirugias_estado      ON cirugias(estado);

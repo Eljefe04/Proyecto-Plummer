@@ -3,34 +3,81 @@ const db = require('../db/index');
 
 let ioInstance = null;
 
-/**
- * Registra la instancia de socket.io para poder emitir desde
- * cualquier ruta del sistema sin pasarla por parametro cada vez.
- */
 function initNotificaciones(io) {
   ioInstance = io;
 }
 
-/**
- * Envia una notificacion en tiempo real a un rol completo (ej: 'laboratorio')
- * o a un medico especifico (ej: medicoId de Cardiologia), y la persiste
- * en la tabla notificaciones para que quien no este conectado la vea
- * apenas entre.
- *
- * @param {object} params
- * @param {string} params.destinoRol - rol destino: 'laboratorio','farmacia','imagenes','enfermeria','quirofano','medico','recepcion'
- * @param {string} [params.destinoMedicoId] - si destinoRol es 'medico', el id puntual del medico
- * @param {string} params.tipo - tipo de evento (ej: 'turno_creado', 'receta_nueva', 'resultado_listo')
- * @param {string} params.titulo
- * @param {string} params.mensaje
- * @param {string} [params.pacienteId]
- */
-function emitirNotificacion({ destinoRol, destinoMedicoId = null, tipo, titulo, mensaje, pacienteId = null }) {
-  const id = uuidv4();
-  const payload = { id, tipo, titulo, mensaje, pacienteId, creado_en: new Date().toISOString() };
+// ------------------------------------------------------------
+// MAPA DESTINO -> SALAS
+//
+// Este es el arreglo mas importante del modulo. Antes se emitia
+// directo a `rol:${destino}`, pero los destinos de derivacion
+// ('cardiologia', 'internacion', 'cirugia'...) NO coinciden con
+// los 8 roles de login, que son las unicas salas que existen.
+//
+// Resultado: derivar a Cardiologia, a Internacion o a Cirugia
+// emitia una notificacion al vacio. Nadie la recibia nunca.
+//
+// Ahora cada destino declara explicitamente a que salas va.
+// ------------------------------------------------------------
+const DESTINO_A_SALAS = {
+  // Especialidades clinicas -> la sala general de medicos.
+  // Ademas, si se conoce el medico puntual, se agrega su sala propia.
+  obstetricia:       ['rol:medico'],
+  cardiologia:       ['rol:medico'],
+  neurologia:        ['rol:medico'],
+  pediatria:         ['rol:medico'],
 
-  // Persistencia en base de datos: no bloqueamos la emision en vivo por esto,
-  // se guarda en segundo plano para que quien no este conectado la vea al entrar.
+  // Areas de internacion -> las maneja Enfermeria.
+  internacion:       ['rol:enfermeria'],
+  terapia_intensiva: ['rol:enfermeria'],
+
+  // Guardia: la admision la hace Recepcion, la atencion Enfermeria.
+  guardia:           ['rol:recepcion', 'rol:enfermeria'],
+
+  // Quirofano cubre cirugia y anestesiologia.
+  cirugia:           ['rol:quirofano'],
+  anestesiologia:    ['rol:quirofano'],
+
+  // Servicios con rol propio.
+  laboratorio:       ['rol:laboratorio'],
+  imagenes:          ['rol:imagenes'],
+  farmacia:          ['rol:farmacia'],
+  enfermeria:        ['rol:enfermeria'],
+  recepcion:         ['rol:recepcion'],
+  quirofano:         ['rol:quirofano'],
+  medico:            ['rol:medico'],
+  administrador:     ['rol:administrador'],
+};
+
+function salasDe(destino) {
+  return DESTINO_A_SALAS[destino] || [`rol:${destino}`];
+}
+
+/**
+ * Envia una notificacion en vivo y la persiste para quien no este conectado.
+ */
+function emitirNotificacion({
+  destinoRol,
+  destinoMedicoId = null,
+  tipo,
+  titulo,
+  mensaje,
+  pacienteId = null,
+  prioridad = 'normal',
+}) {
+  const id = uuidv4();
+  const payload = {
+    id,
+    tipo,
+    titulo,
+    mensaje,
+    pacienteId,
+    prioridad,
+    destino: destinoRol,
+    creado_en: new Date().toISOString(),
+  };
+
   db.prepare(`
     INSERT INTO notificaciones (id, destino_rol, destino_medico_id, tipo, titulo, mensaje, paciente_id)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -39,10 +86,10 @@ function emitirNotificacion({ destinoRol, destinoMedicoId = null, tipo, titulo, 
 
   if (!ioInstance) return payload;
 
-  // Sala por rol (ej: todos los que entraron como "laboratorio")
-  ioInstance.to(`rol:${destinoRol}`).emit('notificacion', payload);
+  // El administrador supervisa: recibe copia de todo.
+  const salas = new Set([...salasDe(destinoRol), 'rol:administrador']);
+  salas.forEach((sala) => ioInstance.to(sala).emit('notificacion', payload));
 
-  // Sala especifica por medico (aislamiento por especialidad/persona)
   if (destinoMedicoId) {
     ioInstance.to(`medico:${destinoMedicoId}`).emit('notificacion', payload);
   }
@@ -51,15 +98,30 @@ function emitirNotificacion({ destinoRol, destinoMedicoId = null, tipo, titulo, 
 }
 
 /**
- * Emite un evento de "refrescar datos" a las salas indicadas, para que
- * las terminales conectadas vuelvan a pedir la lista actualizada
- * (turnos, camas, etc.) sin que el usuario tenga que recargar la pagina.
+ * Avisa a las terminales conectadas que un recurso cambio.
+ *
+ * MEJORA DE FLUIDEZ: ahora el evento puede viajar CON los datos
+ * (parametro `datos`). Antes solo decia "cambio camas" y cada
+ * terminal disparaba un GET completo contra Render -> Neon -> vuelta.
+ * Ese viaje HTTP era el retraso que se notaba, no el socket.
+ * Si mandamos los datos en el propio evento, la pantalla se
+ * actualiza sin pedir nada.
  */
-function emitirActualizacion({ salas = [], recurso }) {
+function emitirActualizacion({ salas = [], recurso, datos = null, destinos = null }) {
   if (!ioInstance) return;
-  salas.forEach((sala) => {
-    ioInstance.to(sala).emit('actualizar', { recurso, ts: Date.now() });
-  });
+
+  const objetivo = new Set(salas);
+  if (destinos) destinos.forEach((d) => salasDe(d).forEach((s) => objetivo.add(s)));
+  objetivo.add('rol:administrador'); // supervision
+
+  const payload = { recurso, datos, ts: Date.now() };
+  objetivo.forEach((sala) => ioInstance.to(sala).emit('actualizar', payload));
 }
 
-module.exports = { initNotificaciones, emitirNotificacion, emitirActualizacion };
+module.exports = {
+  initNotificaciones,
+  emitirNotificacion,
+  emitirActualizacion,
+  DESTINO_A_SALAS,
+  salasDe,
+};

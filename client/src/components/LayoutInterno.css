@@ -215,3 +215,43 @@
     display: none;
   }
 }
+
+/* ---------- Barra superior: hamburguesa + campana ---------- */
+.layout__topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.layout__topbar h1 { flex: 1; min-width: 0; }
+
+.layout__acciones {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout__hamburguesa {
+  background: transparent;
+  border: 0;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--texto-principal);
+  display: inline-flex;
+}
+.layout__hamburguesa:hover { background: rgba(11, 61, 98, 0.08); }
+
+.panel-notificaciones__vacio {
+  padding: 26px 16px;
+  text-align: center;
+  color: var(--texto-secundario);
+  font-size: 13px;
+}
+
+.layout__toast--urgente {
+  border-left: 4px solid var(--estado-urgente-punto);
+}
+.layout__toast--urgente .layout__toast-icono {
+  color: var(--estado-urgente-punto);
+}

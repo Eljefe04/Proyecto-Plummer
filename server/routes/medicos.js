@@ -29,7 +29,7 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/', requireRol('administrador'), async (req, res, next) => {
+router.post('/', requireRol('administrador', 'recepcion', 'quirofano'), async (req, res, next) => {
   try {
     const b = req.body;
     if (!b.nombre || !b.apellido || !b.matricula || !b.especialidad) {
@@ -68,7 +68,7 @@ router.post('/', requireRol('administrador'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.put('/:id', requireRol('administrador'), async (req, res, next) => {
+router.put('/:id', requireRol('administrador', 'recepcion'), async (req, res, next) => {
   try {
     const b = req.body;
     const actual = await db.prepare(`SELECT * FROM medicos WHERE id = ?`).get(req.params.id);
@@ -112,7 +112,7 @@ router.put('/:id', requireRol('administrador'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.patch('/:id/baja', requireRol('administrador'), async (req, res, next) => {
+router.patch('/:id/baja', requireRol('administrador', 'recepcion'), async (req, res, next) => {
   try {
     const actual = await db.prepare(`SELECT * FROM medicos WHERE id = ?`).get(req.params.id);
     if (!actual) return res.status(404).json({ error: 'Medico no encontrado' });

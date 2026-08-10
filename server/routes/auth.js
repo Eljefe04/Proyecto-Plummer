@@ -49,7 +49,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
     }
 
-    const token = crearSesion(row);
+    const token = await crearSesion(row, especialidad || null);
 
     await registrarAuditoria({
       usuario: row.nombre_completo,
@@ -70,10 +70,11 @@ router.post('/login', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/logout', middlewareAuth, (req, res) => {
-  const token = req.headers['x-session-token'];
-  eliminarSesion(token);
-  res.json({ ok: true });
+router.post('/logout', middlewareAuth, async (req, res, next) => {
+  try {
+    await eliminarSesion(req.headers['x-session-token']);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 router.get('/me', middlewareAuth, (req, res) => {

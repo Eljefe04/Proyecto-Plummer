@@ -55,7 +55,55 @@ async function exec(sqlTexto) {
   await pool.query(sqlTexto);
 }
 
-const db = { prepare, exec };
+// ------------------------------------------------------------
+// Transacciones.
+//
+// Hace falta para los circuitos que tocan varias tablas a la vez:
+// asignar una cama tiene que marcar la cama Y marcar al paciente
+// como internado. Si una de las dos falla, no puede quedar la mitad
+// hecha (una cama ocupada por un paciente que figura ambulatorio).
+//
+//   await db.transaccion(async (tx) => {
+//     await tx.prepare('UPDATE ...').run(...);
+//     await tx.prepare('UPDATE ...').run(...);
+//   });
+// ------------------------------------------------------------
+async function transaccion(fn) {
+  const client = await pool.connect();
+  const tx = {
+    prepare(sqlTexto) {
+      const sqlConvertido = convertirPlaceholders(sqlTexto);
+      return {
+        async run(...params) {
+          const res = await client.query(sqlConvertido, params);
+          return { changes: res.rowCount };
+        },
+        async get(...params) {
+          const res = await client.query(sqlConvertido, params);
+          return res.rows[0];
+        },
+        async all(...params) {
+          const res = await client.query(sqlConvertido, params);
+          return res.rows;
+        },
+      };
+    },
+  };
+
+  try {
+    await client.query('BEGIN');
+    const resultado = await fn(tx);
+    await client.query('COMMIT');
+    return resultado;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+const db = { prepare, exec, transaccion, pool };
 
 // ------------------------------------------------------------
 // Inicializacion: crea las tablas si no existen (CREATE TABLE IF

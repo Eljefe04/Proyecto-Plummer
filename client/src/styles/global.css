@@ -91,3 +91,291 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   SISTEMA DE DISENO v2
+   El verde entra como color SEMANTICO, no decorativo: cada color
+   significa lo mismo en las diez pantallas, asi el estado del
+   hospital se lee de un vistazo.
+   ============================================================ */
+
+:root {
+  /* Estados: mismo significado en todo el sistema */
+  --estado-libre-fondo:      #e6f6f0;
+  --estado-libre-texto:      #12795c;
+  --estado-libre-punto:      #1f9d76;
+
+  --estado-pendiente-fondo:  #fdf3e0;
+  --estado-pendiente-texto:  #a8720c;
+  --estado-pendiente-punto:  #e8a020;
+
+  --estado-curso-fondo:      #eaf0f8;
+  --estado-curso-texto:      #12508f;
+  --estado-curso-punto:      #12508f;
+
+  --estado-urgente-fondo:    #fbe7e7;
+  --estado-urgente-texto:    #b32b2b;
+  --estado-urgente-punto:    #d13b3b;
+
+  --estado-inactivo-fondo:   #eef2f7;
+  --estado-inactivo-texto:   #5b7797;
+  --estado-inactivo-punto:   #8a99ab;
+
+  --panel-oscuro:            #0c243f;
+  --panel-oscuro-suave:      #143454;
+  --verde-acento:            #2fd39e;
+
+  /* Alto de la barra inferior en celular */
+  --nav-movil-alto: 62px;
+}
+
+/* ---------- Chip de estado ---------- */
+.estado-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.estado-chip::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.estado-chip--libre     { background: var(--estado-libre-fondo);     color: var(--estado-libre-texto); }
+.estado-chip--pendiente { background: var(--estado-pendiente-fondo); color: var(--estado-pendiente-texto); }
+.estado-chip--curso     { background: var(--estado-curso-fondo);     color: var(--estado-curso-texto); }
+.estado-chip--urgente   { background: var(--estado-urgente-fondo);   color: var(--estado-urgente-texto); }
+.estado-chip--inactivo  { background: var(--estado-inactivo-fondo);  color: var(--estado-inactivo-texto); }
+
+.estado-chip--urgente::before { animation: latido-punto 1.4s ease-in-out infinite; }
+@keyframes latido-punto {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%      { transform: scale(1.5); opacity: 0.55; }
+}
+
+/* ---------- Destello de actualizacion en vivo ----------
+   Cuando el cambio se VE, el sistema se siente mas rapido
+   aunque tarde exactamente lo mismo. */
+.fila--actualizada {
+  animation: destello-actualizacion 2s ease-out;
+}
+@keyframes destello-actualizacion {
+  0%   { background-color: rgba(47, 211, 158, 0.28); }
+  100% { background-color: transparent; }
+}
+
+/* ---------- Aparicion escalonada de tarjetas ---------- */
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.surgir { animation: surgir 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.surgir:nth-child(1) { animation-delay: 0ms; }
+.surgir:nth-child(2) { animation-delay: 45ms; }
+.surgir:nth-child(3) { animation-delay: 90ms; }
+.surgir:nth-child(4) { animation-delay: 135ms; }
+.surgir:nth-child(5) { animation-delay: 180ms; }
+.surgir:nth-child(6) { animation-delay: 225ms; }
+
+/* ---------- Electrocardiograma del login ---------- */
+@keyframes trazo-ecg {
+  from { stroke-dashoffset: var(--largo-trazo); }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes brillo-ecg {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+
+/* ---------- Campana de notificaciones ---------- */
+.campana {
+  position: relative;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 10px;
+  color: inherit;
+  display: inline-flex;
+  transition: background var(--transicion);
+}
+.campana:hover { background: rgba(255, 255, 255, 0.12); }
+
+.campana__contador {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--estado-urgente-punto);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  animation: aparecer-contador 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes aparecer-contador {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+.campana--suena { animation: sacudir-campana 620ms ease-in-out; }
+@keyframes sacudir-campana {
+  0%, 100%    { transform: rotate(0); }
+  15%, 45%    { transform: rotate(-13deg); }
+  30%, 60%    { transform: rotate(13deg); }
+  75%         { transform: rotate(-6deg); }
+}
+
+.panel-notificaciones {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(380px, calc(100vw - 28px));
+  max-height: 440px;
+  overflow-y: auto;
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde-suave);
+  border-radius: var(--radio-md);
+  box-shadow: var(--sombra-media);
+  z-index: 60;
+  animation: surgir 200ms ease-out;
+}
+.panel-notificaciones__item {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--borde-suave);
+  display: grid;
+  gap: 3px;
+}
+.panel-notificaciones__item:last-child { border-bottom: 0; }
+.panel-notificaciones__item--urgente { border-left: 3px solid var(--estado-urgente-punto); }
+.panel-notificaciones__titulo { font-weight: 700; font-size: 13.5px; }
+.panel-notificaciones__mensaje { font-size: 13px; color: var(--texto-secundario); }
+.panel-notificaciones__hora { font-size: 11px; color: var(--texto-secundario); opacity: 0.8; }
+
+/* ---------- Cuenta regresiva de limpieza ---------- */
+.regresiva {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--estado-pendiente-texto);
+}
+
+/* ============================================================
+   CELULAR
+   El uso principal es en computadora, pero tiene que ser usable
+   en el telefono: barra lateral fuera, navegacion abajo, tablas
+   convertidas en tarjetas y objetivos tactiles grandes.
+   ============================================================ */
+
+.solo-movil    { display: none; }
+.solo-escritorio { display: initial; }
+
+@media (max-width: 860px) {
+  .solo-movil      { display: initial; }
+  .solo-escritorio { display: none !important; }
+
+  /* La barra lateral pasa a cajon deslizante */
+  .layout__lateral {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 80;
+    width: min(280px, 82vw);
+    transform: translateX(-100%);
+    transition: transform 260ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .layout__lateral--abierta { transform: translateX(0); }
+
+  .layout__velo {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 30, 50, 0.45);
+    z-index: 70;
+    animation: surgir 180ms ease-out;
+  }
+
+  .layout__contenido,
+  .layout__principal {
+    margin-left: 0 !important;
+    padding: 14px 13px calc(var(--nav-movil-alto) + 18px) !important;
+  }
+
+  /* Tablas que no entran: se convierten en tarjetas apiladas.
+     Cada celda muestra su encabezado con data-label. */
+  .tabla-responsive thead { display: none; }
+  .tabla-responsive tbody tr {
+    display: block;
+    margin-bottom: 11px;
+    border: 1px solid var(--borde-suave);
+    border-radius: var(--radio-sm);
+    padding: 10px 12px;
+    background: var(--fondo-tarjeta);
+  }
+  .tabla-responsive tbody td {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    border: 0;
+    padding: 5px 0;
+    text-align: right;
+  }
+  .tabla-responsive tbody td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--texto-secundario);
+    font-size: 12px;
+    text-align: left;
+  }
+
+  /* Objetivos tactiles comodos */
+  button, .boton, select, input, textarea { min-height: 44px; }
+
+  h1 { font-size: 22px; }
+  h2 { font-size: 18px; }
+
+  /* Formularios a una sola columna */
+  .grilla-campos, .formulario__grilla { grid-template-columns: 1fr !important; }
+}
+
+/* Barra de navegacion inferior (solo celular) */
+.nav-movil {
+  display: none;
+}
+@media (max-width: 860px) {
+  .nav-movil {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--nav-movil-alto);
+    background: var(--panel-oscuro);
+    z-index: 65;
+    padding: 0 4px;
+    box-shadow: 0 -3px 14px rgba(0, 0, 0, 0.18);
+  }
+  .nav-movil__item {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    gap: 2px;
+    color: rgba(255, 255, 255, 0.62);
+    text-decoration: none;
+    font-size: 10.5px;
+    font-weight: 600;
+    border: 0;
+    background: transparent;
+    padding: 6px 2px;
+  }
+  .nav-movil__item--activo { color: var(--verde-acento); }
+  .nav-movil__icono { font-size: 19px; line-height: 1; }
+}

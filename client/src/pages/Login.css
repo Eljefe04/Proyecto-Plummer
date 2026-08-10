@@ -240,3 +240,117 @@
     padding: 28px 22px;
   }
 }
+
+/* ============================================================
+   Estado del servidor, aviso de sesion y ficha de Plummer
+   ============================================================ */
+
+.login__aviso {
+  background: var(--estado-pendiente-fondo);
+  color: var(--estado-pendiente-texto);
+  border-left: 3px solid var(--estado-pendiente-punto);
+  padding: 11px 14px;
+  border-radius: var(--radio-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.login__despertando {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--estado-curso-fondo);
+  border-radius: var(--radio-sm);
+  padding: 13px 15px;
+  margin-bottom: 18px;
+}
+.login__despertando strong {
+  display: block;
+  font-size: 13.5px;
+  color: var(--estado-curso-texto);
+}
+.login__despertando p {
+  font-size: 12.5px;
+  color: var(--texto-secundario);
+  margin-top: 2px;
+}
+.login__despertando-punto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--plummer-azul-medio);
+  margin-top: 4px;
+  flex-shrink: 0;
+  animation: latido-punto 1.2s ease-in-out infinite;
+}
+
+.login__barra {
+  height: 4px;
+  background: rgba(18, 80, 143, 0.16);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 9px;
+}
+.login__barra-relleno {
+  height: 100%;
+  background: var(--plummer-azul-medio);
+  border-radius: 999px;
+  transition: width 400ms ease-out;
+}
+
+/* ---------- Plummer en el panel institucional ----------
+   "Por que se llama Plummer" es de las primeras preguntas en una
+   defensa. Que la respuesta este en la pantalla de inicio. */
+.login__plummer {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-top: 22px;
+  padding: 15px;
+  border-radius: var(--radio-md);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.login__plummer-foto {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+}
+.login__plummer-nombre {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #fff;
+}
+.login__plummer-nombre span {
+  font-weight: 500;
+  opacity: 0.6;
+  margin-left: 6px;
+  font-size: 12px;
+}
+.login__plummer-bio {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(244, 247, 250, 0.78);
+  margin-top: 4px;
+}
+
+@media (max-width: 860px) {
+  .login {
+    grid-template-columns: 1fr !important;
+    display: block !important;
+  }
+  .login__panel-institucional {
+    padding: 24px 18px !important;
+    min-height: auto !important;
+  }
+  .login__hero h1 { font-size: 21px; }
+  .login__pulso { display: none; }
+  .login__plummer { margin-top: 16px; }
+  .login__panel-acceso { padding: 20px 15px !important; }
+  .login__grid-roles { grid-template-columns: repeat(2, 1fr) !important; }
+  .login__footer-institucional { display: none; }
+}

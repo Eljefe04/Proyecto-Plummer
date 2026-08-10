@@ -1,38 +1,52 @@
-// Genera un "beep" corto con la Web Audio API, sin necesidad de archivos de audio externos.
-export function reproducirBeep() {
+// Beep sintetizado con WebAudio: no requiere archivos de audio.
+// Los navegadores bloquean el audio hasta la primera interaccion del
+// usuario, cosa que en la practica siempre ocurre (el login).
+
+let contexto = null;
+
+function obtenerContexto() {
+  if (!contexto) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    contexto = new AC();
+  }
+  if (contexto.state === 'suspended') contexto.resume().catch(() => {});
+  return contexto;
+}
+
+function tono(ctx, frecuencia, inicio, duracion, volumen) {
+  const osc = ctx.createOscillator();
+  const gan = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = frecuencia;
+  gan.gain.setValueAtTime(0, inicio);
+  gan.gain.linearRampToValueAtTime(volumen, inicio + 0.012);
+  gan.gain.exponentialRampToValueAtTime(0.0001, inicio + duracion);
+  osc.connect(gan);
+  gan.connect(ctx.destination);
+  osc.start(inicio);
+  osc.stop(inicio + duracion + 0.02);
+}
+
+/**
+ * @param {'normal'|'urgente'} tipo
+ */
+export function reproducirBeep(tipo = 'normal') {
   try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioContextClass();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const ctx = obtenerContexto();
+    if (!ctx) return;
+    const t = ctx.currentTime;
 
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    gain.gain.setValueAtTime(0.001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.36);
-
-    // segundo pulso, para que suene a "notificacion" y no a un tono plano
-    setTimeout(() => {
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(1050, ctx.currentTime);
-      gain2.gain.setValueAtTime(0.001, ctx.currentTime);
-      gain2.gain.exponentialRampToValueAtTime(0.13, ctx.currentTime + 0.02);
-      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start();
-      osc2.stop(ctx.currentTime + 0.31);
-    }, 160);
+    if (tipo === 'urgente') {
+      // Triple pulso mas agudo y marcado para triage 1 y cirugias urgentes.
+      tono(ctx, 980, t, 0.14, 0.16);
+      tono(ctx, 980, t + 0.19, 0.14, 0.16);
+      tono(ctx, 1240, t + 0.38, 0.22, 0.18);
+    } else {
+      tono(ctx, 660, t, 0.11, 0.11);
+      tono(ctx, 880, t + 0.13, 0.16, 0.11);
+    }
   } catch {
-    // si el navegador bloquea audio sin interaccion previa, fallamos en silencio
+    // si el navegador bloquea el audio, la notificacion visual igual aparece
   }
 }
