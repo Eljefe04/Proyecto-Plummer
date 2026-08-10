@@ -4,6 +4,7 @@ const { middlewareAuth, requireRol } = require('../middleware/auth');
 const { registrarAuditoria } = require('../db/auditoria');
 const { emitirNotificacion, emitirActualizacion } = require('../sockets/notificaciones');
 const { nuevoId, parseJsonSafe } = require('./_utils');
+const { internarPaciente, requiereCama, NOMBRE_SECTOR } = require('./_internacion');
 
 const router = express.Router();
 router.use(middlewareAuth);
@@ -54,8 +55,26 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       pacienteId: b.paciente_id || null,
     });
 
+    // Si el ingreso vino con cama elegida, se marca ocupada Y el paciente
+    // pasa a internado. Antes solo se tocaba la cama, asi que el paciente
+    // nunca aparecia en la pantalla de Internacion.
     if (b.cama_id) {
-      await db.prepare(`UPDATE camas SET estado = 'ocupada', paciente_id = ? WHERE id = ?`).run(b.paciente_id || null, b.cama_id);
+      await db.transaccion(async (tx) => {
+        await tx.prepare(
+          "UPDATE camas SET estado = 'ocupada', paciente_id = ?, limpieza_desde = NULL WHERE id = ?"
+        ).run(b.paciente_id || null, b.cama_id);
+        if (b.paciente_id) {
+          await tx.prepare("UPDATE pacientes SET estado = 'internado' WHERE id = ?").run(b.paciente_id);
+        }
+      });
+      emitirActualizacion({
+        salas: ['rol:enfermeria', 'rol:recepcion', 'rol:medico'],
+        recurso: 'camas',
+      });
+      emitirActualizacion({
+        salas: ['rol:enfermeria', 'rol:recepcion', 'rol:medico'],
+        recurso: 'internados',
+      });
     }
 
     if (b.pre_orden_estudios && b.paciente_id) {
@@ -79,6 +98,18 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       emitirActualizacion({ salas: ['rol:laboratorio'], recurso: 'estudios_laboratorio' });
     }
 
+    // Enfermeria es quien toma signos vitales: tiene que enterarse del
+    // ingreso, y con sonido distinto si es un triage 1 o 2.
+    const urgente = Number(b.nivel_triage) <= 2;
+    emitirNotificacion({
+      destinoRol: 'enfermeria',
+      tipo: 'ingreso_guardia',
+      titulo: urgente ? `Ingreso a Guardia — TRIAGE ${b.nivel_triage}` : 'Nuevo ingreso a Guardia',
+      mensaje: `${b.motivo_consulta}${b.cama_id ? ' (con cama asignada)' : ''}`,
+      pacienteId: b.paciente_id || null,
+      prioridad: urgente ? 'urgente' : 'normal',
+    });
+
     emitirActualizacion({ salas: ['rol:recepcion', 'rol:administrador', 'rol:enfermeria'], recurso: 'guardia' });
 
     const row = await db.prepare(`SELECT * FROM guardia_ingresos WHERE id = ?`).get(id);
@@ -94,11 +125,23 @@ router.patch('/:id/derivar', requireRol('administrador', 'recepcion'), async (re
 
     await db.prepare(`UPDATE guardia_ingresos SET derivacion_destino = ?, estado = 'derivado' WHERE id = ?`).run(destino, req.params.id);
 
+    // La derivacion desde Guardia ahora interna de verdad: crea el
+    // registro Y asigna cama en el sector de destino, marcando al
+    // paciente como internado. Antes solo dejaba el registro y avisaba,
+    // por eso el paciente nunca aparecia del otro lado.
+    let internacion = null;
     if (actual.paciente_id) {
-      await db.prepare(`
-        INSERT INTO derivaciones (id, paciente_id, origen, destino, motivo, derivado_por)
-        VALUES (?,?,?,?,?,?)
-      `).run(nuevoId(), actual.paciente_id, 'guardia', destino, actual.motivo_consulta, req.sesion.nombreCompleto);
+      const prioridad = Number(actual.nivel_triage) <= 2 ? 'urgente' : 'normal';
+      internacion = await db.transaccion(async (tx) => {
+        await tx.prepare(`
+          INSERT INTO derivaciones (id, paciente_id, origen, destino, motivo, derivado_por, prioridad)
+          VALUES (?,?,?,?,?,?,?)
+        `).run(nuevoId(), actual.paciente_id, 'guardia', destino, actual.motivo_consulta,
+               req.sesion.nombreCompleto, prioridad);
+
+        if (!requiereCama(destino)) return null;
+        return internarPaciente(tx, { pacienteId: actual.paciente_id, destino });
+      });
     }
 
     await registrarAuditoria({
@@ -110,16 +153,45 @@ router.patch('/:id/derivar', requireRol('administrador', 'recepcion'), async (re
       pacienteId: actual.paciente_id,
     });
 
+    const urgente = Number(actual.nivel_triage) <= 2;
+    let detalleCama = '';
+    if (internacion && internacion.ok) {
+      detalleCama = internacion.yaTenia
+        ? ` Ya ocupaba la cama ${internacion.cama.codigo}.`
+        : ` Cama asignada: ${internacion.cama.codigo}.`;
+    } else if (internacion && internacion.motivo === 'sin_camas') {
+      detalleCama = ` ATENCIÓN: no hay camas libres en ${NOMBRE_SECTOR[destino] || destino}.`;
+    }
+
     emitirNotificacion({
       destinoRol: destino,
       tipo: 'derivacion_recibida',
-      titulo: 'Nueva derivación desde Guardia',
-      mensaje: `Paciente derivado desde Guardia hacia ${destino}`,
+      titulo: urgente ? 'Derivación URGENTE desde Guardia' : 'Nueva derivación desde Guardia',
+      mensaje: `Paciente derivado desde Guardia (triage ${actual.nivel_triage}). ${actual.motivo_consulta}.${detalleCama}`,
       pacienteId: actual.paciente_id,
+      prioridad: urgente ? 'urgente' : 'normal',
     });
-    emitirActualizacion({ salas: [`rol:${destino}`, 'rol:recepcion'], recurso: 'guardia' });
 
-    res.json({ ok: true });
+    emitirActualizacion({ destinos: [destino], recurso: 'derivaciones' });
+    emitirActualizacion({ salas: ['rol:recepcion', 'rol:enfermeria'], recurso: 'guardia' });
+    if (internacion && internacion.ok) {
+      emitirActualizacion({
+        salas: ['rol:enfermeria', 'rol:recepcion', 'rol:medico'],
+        recurso: 'camas',
+      });
+      emitirActualizacion({
+        salas: ['rol:enfermeria', 'rol:recepcion', 'rol:medico'],
+        recurso: 'internados',
+      });
+    }
+
+    res.json({
+      ok: true,
+      cama_asignada: internacion && internacion.ok ? internacion.cama.codigo : null,
+      advertencia: internacion && !internacion.ok && internacion.motivo === 'sin_camas'
+        ? `No hay camas libres en ${NOMBRE_SECTOR[destino] || destino}.`
+        : null,
+    });
   } catch (err) { next(err); }
 });
 

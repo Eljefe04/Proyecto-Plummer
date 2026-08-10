@@ -671,3 +671,85 @@
   color: var(--texto-secundario);
   min-height: 32px;
 }
+
+.tarjeta-seccion__subtitulo {
+  font-size: 12.5px;
+  color: var(--texto-secundario);
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.pila-secciones { display: grid; gap: 16px; }
+
+.aviso-error {
+  background: var(--estado-urgente-fondo);
+  color: var(--estado-urgente-texto);
+  border-left: 3px solid var(--estado-urgente-punto);
+  padding: 11px 14px;
+  border-radius: var(--radio-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* ---------- Bandeja de derivaciones ---------- */
+.lista-derivaciones { display: grid; gap: 10px; }
+.lista-derivaciones--tenue { opacity: 0.62; }
+
+.tarjeta-derivacion {
+  border: 1px solid var(--borde-suave);
+  border-left: 3px solid var(--plummer-azul-medio);
+  border-radius: var(--radio-sm);
+  padding: 13px 15px;
+  background: var(--fondo-tarjeta);
+  display: grid;
+  gap: 8px;
+  transition: box-shadow var(--transicion), transform var(--transicion);
+}
+.tarjeta-derivacion:hover {
+  box-shadow: var(--sombra-suave);
+  transform: translateY(-1px);
+}
+.tarjeta-derivacion--urgente {
+  border-left-color: var(--estado-urgente-punto);
+  background: linear-gradient(90deg, rgba(209, 59, 59, 0.045), transparent 45%);
+}
+.tarjeta-derivacion--atendida {
+  border-left-color: var(--estado-inactivo-punto);
+}
+
+.tarjeta-derivacion__cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.tarjeta-derivacion__paciente {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--texto-principal);
+}
+.tarjeta-derivacion__meta {
+  font-size: 12.5px;
+  color: var(--texto-secundario);
+  margin-top: 2px;
+}
+.tarjeta-derivacion__motivo {
+  font-size: 13.5px;
+  color: var(--texto-principal);
+  background: var(--fondo-suave, #f5f8fb);
+  padding: 8px 11px;
+  border-radius: var(--radio-sm);
+}
+.tarjeta-derivacion__pie {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 860px) {
+  .tarjeta-derivacion__cabecera { flex-direction: column; gap: 6px; }
+  .tarjeta-derivacion__pie { flex-direction: column; align-items: stretch; }
+  .tarjeta-derivacion__pie .boton { width: 100%; }
+}

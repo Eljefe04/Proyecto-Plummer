@@ -12,12 +12,17 @@ export function Boton({ variante = 'primario', tamano = 'md', children, ...props
   );
 }
 
-export function TarjetaSeccion({ titulo, acciones, children }) {
+export function TarjetaSeccion({ titulo, subtitulo, acciones, children }) {
   return (
     <section className="tarjeta-seccion">
       {(titulo || acciones) && (
         <div className="tarjeta-seccion__header">
-          {titulo && <h2>{titulo}</h2>}
+          {titulo && (
+            <div>
+              <h2>{titulo}</h2>
+              {subtitulo && <p className="tarjeta-seccion__subtitulo">{subtitulo}</p>}
+            </div>
+          )}
           {acciones && <div className="tarjeta-seccion__acciones">{acciones}</div>}
         </div>
       )}

@@ -24,8 +24,7 @@ export default function PacientesInternados() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
-  useActualizacionTiempoReal('camas', cargar);
-  useActualizacionTiempoReal('guardia', cargar);
+  useActualizacionTiempoReal(['camas', 'guardia', 'internados', 'derivaciones'], cargar);
 
   function abrirPaciente(p) {
     setPacienteAbierto(p);
