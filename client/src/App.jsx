@@ -24,7 +24,7 @@ function AppRoutes() {
       <Route path="/recepcion/*" element={<RutaProtegida><Recepcion /></RutaProtegida>} />
       <Route path="/terminal" element={<RutaProtegida><Terminal /></RutaProtegida>} />
       <Route path="/enfermeria/*" element={<RutaProtegida><Enfermeria /></RutaProtegida>} />
-      <Route path="/farmacia" element={<RutaProtegida><Farmacia /></RutaProtegida>} />
+      <Route path="/farmacia/*" element={<RutaProtegida><Farmacia /></RutaProtegida>} />
       <Route path="/laboratorio" element={<RutaProtegida><Laboratorio /></RutaProtegida>} />
       <Route path="/imagenes" element={<RutaProtegida><Imagenes /></RutaProtegida>} />
       <Route path="/quirofano/*" element={<RutaProtegida><Quirofano /></RutaProtegida>} />

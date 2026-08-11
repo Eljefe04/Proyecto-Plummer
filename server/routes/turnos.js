@@ -83,8 +83,24 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       return res.status(400).json({ error: 'Paciente, medico, fecha y hora son obligatorios' });
     }
 
+    // No se pueden agendar turnos hacia atras. Se valida en el servidor
+    // ademas del `min` del calendario, porque el del navegador se saltea.
+    const hoy = new Date().toISOString().slice(0, 10);
+    if (b.fecha < hoy) {
+      return res.status(400).json({
+        error: 'No se puede agendar un turno en una fecha anterior a hoy.',
+      });
+    }
+
     const medico = await db.prepare(`SELECT * FROM medicos WHERE id = ?`).get(b.medico_id);
     if (!medico) return res.status(404).json({ error: 'Medico no encontrado' });
+
+    // Cirujanos y anestesiologos no atienden por consultorio.
+    if (['cirugia', 'anestesiologia'].includes(medico.especialidad)) {
+      return res.status(400).json({
+        error: 'Los profesionales de quirófano no toman turnos de consultorio.',
+      });
+    }
 
     if (!medico.hora_inicio || !medico.hora_fin || !medico.dias_atencion || medico.dias_atencion === '[]') {
       return res.status(400).json({ error: 'Este medico no tiene agenda configurada. No se puede cargar el turno.' });
@@ -97,14 +113,24 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       return res.status(409).json({ error: 'Ese horario ya esta ocupado para este medico' });
     }
 
+    // Codigo de reunion ficticio para los turnos de telemedicina.
+    // Formato MCB-XXXX-XXXX, legible y facil de dictar por telefono.
+    let codigoVideollamada = null;
+    if (b.modalidad === 'telemedicina') {
+      const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin I, O, 0, 1
+      const bloque = () => Array.from({ length: 4 },
+        () => alfabeto[Math.floor(Math.random() * alfabeto.length)]).join('');
+      codigoVideollamada = `MCB-${bloque()}-${bloque()}`;
+    }
+
     const id = nuevoId();
     await db.prepare(`
-      INSERT INTO turnos (id, paciente_id, medico_id, fecha, hora, modalidad, consultorio, motivo_consulta, creado_por)
-      VALUES (?,?,?,?,?,?,?,?,?)
+      INSERT INTO turnos (id, paciente_id, medico_id, fecha, hora, modalidad, consultorio, motivo_consulta, creado_por, codigo_videollamada)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
     `).run(
       id, b.paciente_id, b.medico_id, b.fecha, b.hora,
       b.modalidad || 'presencial', medico.consultorio || null, b.motivo_consulta || null,
-      req.sesion.nombreCompleto
+      req.sesion.nombreCompleto, codigoVideollamada,
     );
 
     const paciente = await db.prepare(`SELECT * FROM pacientes WHERE id = ?`).get(b.paciente_id);
@@ -178,6 +204,51 @@ router.delete('/:id', requireRol('administrador', 'recepcion'), async (req, res,
     });
 
     emitirActualizacion({ salas: [`medico:${actual.medico_id}`, 'rol:recepcion', 'rol:administrador'], recurso: 'turnos' });
+
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ------------------------------------------------------------
+// PATCH /api/turnos/:id/estado
+// El medico cierra el turno cuando termina de atender. Antes no existia
+// forma de hacerlo: el turno quedaba en "pendiente" para siempre.
+// ------------------------------------------------------------
+router.patch('/:id/estado', async (req, res, next) => {
+  try {
+    const { estado } = req.body;
+    const validos = ['pendiente', 'confirmado', 'atendido', 'cancelado'];
+    if (!validos.includes(estado)) {
+      return res.status(400).json({ error: `Estado no válido. Debe ser uno de: ${validos.join(', ')}` });
+    }
+
+    const turno = await db.prepare(`
+      SELECT t.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido
+      FROM turnos t LEFT JOIN pacientes p ON p.id = t.paciente_id
+      WHERE t.id = ?
+    `).get(req.params.id);
+    if (!turno) return res.status(404).json({ error: 'Turno no encontrado' });
+
+    // Un medico solo puede tocar sus propios turnos.
+    if (req.sesion.rol === 'medico' && req.sesion.medicoId && turno.medico_id !== req.sesion.medicoId) {
+      return res.status(403).json({ error: 'Ese turno no pertenece a su agenda' });
+    }
+
+    await db.prepare('UPDATE turnos SET estado = ? WHERE id = ?').run(estado, req.params.id);
+
+    await registrarAuditoria({
+      usuario: req.sesion.nombreCompleto,
+      rol: req.sesion.rol,
+      accion: 'modificacion',
+      modulo: 'turnos',
+      descripcion: `Turno de ${turno.paciente_apellido}, ${turno.paciente_nombre} marcado como ${estado}`,
+      pacienteId: turno.paciente_id,
+    });
+
+    emitirActualizacion({ salas: ['rol:recepcion', 'rol:medico'], recurso: 'turnos' });
+    if (turno.medico_id) {
+      emitirActualizacion({ salas: [`medico:${turno.medico_id}`], recurso: 'turnos' });
+    }
 
     res.json({ ok: true });
   } catch (err) { next(err); }

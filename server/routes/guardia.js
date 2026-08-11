@@ -15,7 +15,10 @@ router.get('/', async (req, res, next) => {
       SELECT g.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido, p.dni AS paciente_dni
       FROM guardia_ingresos g
       LEFT JOIN pacientes p ON p.id = g.paciente_id
-      WHERE g.estado != 'alta'
+      -- Solo quien esta fisicamente en el sector. Al derivarlo, el
+      -- paciente pasa a la bandeja de Derivaciones recibidas del area
+      -- de destino: siempre figura en un solo lugar a la vez.
+      WHERE g.estado IN ('en_espera', 'en_atencion')
       ORDER BY g.nivel_triage ASC, g.creado_en DESC
     `).all();
     res.json(rows.map(hidratar));

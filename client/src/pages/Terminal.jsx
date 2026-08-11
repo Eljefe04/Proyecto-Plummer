@@ -59,7 +59,12 @@ export default function Terminal() {
 
   const info = medico ? ESPECIALIDAD_INFO[medico.especialidad] : null;
   const hoy = new Date().toISOString().slice(0, 10);
+  // El medico ve su agenda completa, no solo el dia. Antes se traian
+  // todos los turnos de la API y se descartaban los futuros al renderizar,
+  // asi que un turno agendado para manana no aparecia en ningun lado.
   const turnosHoy = turnos.filter((t) => t.fecha === hoy);
+  const turnosProximos = turnos.filter((t) => t.fecha > hoy);
+  const turnosPasados = turnos.filter((t) => t.fecha < hoy);
 
   return (
     <div className="terminal">
@@ -124,7 +129,17 @@ export default function Terminal() {
             onSeleccionar={(p) => { setPacienteBuscado(p); setTab('especifico'); }}
           />
         )}
-        {tab === 'turnos' && <TabTurnos turnosHoy={turnosHoy} />}
+        {tab === 'turnos' && (
+          <TabTurnos
+            turnosHoy={turnosHoy}
+            turnosProximos={turnosProximos}
+            turnosPasados={turnosPasados}
+            hoy={hoy}
+            onSeleccionar={setPacienteBuscado}
+            pacienteActivo={pacienteBuscado}
+            onAtendido={() => api.get('/turnos').then(setTurnos).catch(() => {})}
+          />
+        )}
         {tab === 'estudios' && <TabEstudios medicoId={usuario?.medicoId} pacienteBuscado={pacienteBuscado} />}
         {tab === 'recetas' && <TabRecetas medicoId={usuario?.medicoId} pacienteBuscado={pacienteBuscado} />}
         {tab === 'derivaciones' && <TabDerivaciones medico={medico} pacienteBuscado={pacienteBuscado} />}
@@ -134,28 +149,148 @@ export default function Terminal() {
   );
 }
 
-function TabTurnos({ turnosHoy }) {
+function TablaTurnos({ turnos, onSeleccionar, pacienteActivo, onAtendido, mostrarFecha, permitirAtender }) {
+  const [error, setError] = useState('');
+
+  async function marcarAtendido(id) {
+    setError('');
+    try {
+      await api.patch(`/turnos/${id}/estado`, { estado: 'atendido' });
+      onAtendido();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   return (
-    <TarjetaSeccion titulo="Turnos de Hoy — Mi agenda">
-      {turnosHoy.length === 0 ? (
-        <EstadoVacio texto="No hay turnos para hoy." />
-      ) : (
-        <table className="tabla">
-          <thead><tr><th>Hora</th><th>Paciente</th><th>Modalidad</th><th>Motivo</th><th>Estado</th></tr></thead>
-          <tbody>
-            {turnosHoy.map((t) => (
-              <tr key={t.id}>
-                <td><strong>{t.hora}</strong></td>
-                <td>{t.paciente_apellido}, {t.paciente_nombre}</td>
-                <td style={{ textTransform: 'capitalize' }}>{t.modalidad}</td>
-                <td>{t.motivo_consulta || '—'}</td>
-                <td><Badge tipo={t.estado === 'confirmado' ? 'info' : 'alerta'}>{t.estado}</Badge></td>
+    <>
+      {error && <div className="aviso-error">{error}</div>}
+      <table className="tabla tabla-responsive">
+        <thead>
+          <tr>
+            {mostrarFecha && <th>Fecha</th>}
+            <th>Hora</th><th>Paciente</th><th>Modalidad</th><th>Motivo</th><th>Estado</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {turnos.map((t) => {
+            const activo = pacienteActivo && pacienteActivo.id === t.paciente_id;
+            return (
+              <tr key={t.id} className={activo ? 'fila--seleccionada' : ''}>
+                {mostrarFecha && (
+                  <td data-label="Fecha">
+                    {new Date(`${t.fecha}T00:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                  </td>
+                )}
+                <td data-label="Hora"><strong>{t.hora}</strong></td>
+                <td data-label="Paciente">{t.paciente_apellido}, {t.paciente_nombre}</td>
+                <td data-label="Modalidad" style={{ textTransform: 'capitalize' }}>
+                  {t.modalidad}
+                  {t.codigo_videollamada && (
+                    <span className="codigo-videollamada">{t.codigo_videollamada}</span>
+                  )}
+                </td>
+                <td data-label="Motivo">{t.motivo_consulta || '—'}</td>
+                <td data-label="Estado">
+                  <span className={`estado-chip estado-chip--${
+                    t.estado === 'atendido' ? 'libre' : t.estado === 'confirmado' ? 'curso' : 'pendiente'
+                  }`}>{t.estado}</span>
+                </td>
+                <td data-label="">
+                  <div className="turno-acciones">
+                    {/* Seleccionar el paciente desde su propio turno, sin
+                        tener que buscarlo a mano en el buscador. */}
+                    <Boton
+                      variante={activo ? 'primario' : 'secundario'}
+                      tamano="sm"
+                      onClick={() => onSeleccionar({
+                        id: t.paciente_id,
+                        nombre: t.paciente_nombre,
+                        apellido: t.paciente_apellido,
+                        dni: t.paciente_dni,
+                      })}
+                    >
+                      {activo ? 'Seleccionado' : 'Atender'}
+                    </Boton>
+                    {permitirAtender && t.estado !== 'atendido' && (
+                      <Boton variante="secundario" tamano="sm" onClick={() => marcarAtendido(t.id)}>
+                        Cerrar turno
+                      </Boton>
+                    )}
+                  </div>
+                </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            );
+          })}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function TabTurnos({ turnosHoy, turnosProximos, turnosPasados, onSeleccionar, pacienteActivo, onAtendido }) {
+  const [vista, setVista] = useState('hoy');
+  const listas = { hoy: turnosHoy, proximos: turnosProximos, historial: turnosPasados };
+  const actual = listas[vista] || [];
+
+  return (
+    <div className="pila-secciones">
+      {turnosHoy.length > 0 && vista === 'hoy' && (
+        <div className="proximo-turno surgir">
+          <p className="proximo-turno__label">Próximo turno</p>
+          <p className="proximo-turno__paciente">
+            {turnosHoy[0].paciente_apellido}, {turnosHoy[0].paciente_nombre}
+          </p>
+          <p className="proximo-turno__meta">
+            {turnosHoy[0].hora} · {turnosHoy[0].modalidad}
+            {turnosHoy[0].motivo_consulta ? ` · ${turnosHoy[0].motivo_consulta}` : ''}
+          </p>
+          {turnosHoy[0].codigo_videollamada && (
+            <p className="proximo-turno__codigo">
+              Código de reunión: <strong>{turnosHoy[0].codigo_videollamada}</strong>
+            </p>
+          )}
+        </div>
       )}
-    </TarjetaSeccion>
+
+      <TarjetaSeccion
+        titulo="Mi agenda"
+        acciones={
+          <div className="mini-tabs">
+            {[
+              { v: 'hoy', l: `Hoy (${turnosHoy.length})` },
+              { v: 'proximos', l: `Próximos (${turnosProximos.length})` },
+              { v: 'historial', l: `Historial (${turnosPasados.length})` },
+            ].map((o) => (
+              <button
+                key={o.v}
+                className={`mini-tab ${vista === o.v ? 'mini-tab--activo' : ''}`}
+                onClick={() => setVista(o.v)}
+              >
+                {o.l}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        {actual.length === 0 ? (
+          <EstadoVacio texto={
+            vista === 'hoy' ? 'No hay turnos para hoy.'
+            : vista === 'proximos' ? 'No hay turnos agendados a futuro.'
+            : 'No hay turnos anteriores.'
+          } />
+        ) : (
+          <TablaTurnos
+            turnos={actual}
+            onSeleccionar={onSeleccionar}
+            pacienteActivo={pacienteActivo}
+            onAtendido={onAtendido}
+            mostrarFecha={vista !== 'hoy'}
+            permitirAtender={vista !== 'proximos'}
+          />
+        )}
+      </TarjetaSeccion>
+    </div>
   );
 }
 

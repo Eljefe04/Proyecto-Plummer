@@ -812,3 +812,37 @@
   font-size: 13.5px;
   font-weight: 600;
 }
+
+/* ---------- Agenda del médico ---------- */
+.mini-tabs { display: flex; gap: 4px; background: var(--fondo-suave, #eef2f7); padding: 3px; border-radius: 999px; }
+.mini-tab {
+  border: 0; background: transparent; padding: 6px 13px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 700; color: var(--texto-secundario); cursor: pointer;
+  transition: all var(--transicion); white-space: nowrap;
+}
+.mini-tab--activo { background: #fff; color: var(--plummer-azul-medio); box-shadow: var(--sombra-suave); }
+
+.proximo-turno {
+  background: linear-gradient(120deg, var(--plummer-azul-medio), var(--plummer-azul-oscuro, #0a2f5c));
+  color: #fff; border-radius: var(--radio-md); padding: 16px 19px;
+}
+.proximo-turno__label {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
+  text-transform: uppercase; color: var(--verde-acento);
+}
+.proximo-turno__paciente { font-size: 21px; font-weight: 700; margin-top: 3px; }
+.proximo-turno__meta { font-size: 13.5px; opacity: 0.86; margin-top: 2px; text-transform: capitalize; }
+.proximo-turno__codigo { font-size: 13px; margin-top: 8px; }
+.proximo-turno__codigo strong { font-family: monospace; letter-spacing: 1.4px; background: rgba(255,255,255,0.16); padding: 2px 8px; border-radius: 5px; }
+
+.fila--seleccionada { background: var(--estado-curso-fondo); }
+.turno-acciones { display: flex; gap: 6px; justify-content: flex-end; }
+.codigo-videollamada {
+  display: block; font-family: monospace; font-size: 11.5px;
+  color: var(--plummer-azul-medio); letter-spacing: 1px; margin-top: 2px;
+}
+@media (max-width: 860px) {
+  .turno-acciones { justify-content: stretch; }
+  .turno-acciones .boton { flex: 1; }
+  .mini-tabs { width: 100%; overflow-x: auto; }
+}
