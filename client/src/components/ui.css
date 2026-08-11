@@ -928,3 +928,17 @@
   border-radius: var(--radio-sm); margin: 0;
 }
 .boton--archivo { cursor: pointer; display: inline-flex; align-items: center; }
+
+/* ---------- Checklist OMS ---------- */
+.checklist { display: grid; gap: 4px; margin-bottom: 16px; }
+.checklist__item {
+  display: flex; align-items: center; gap: 11px; padding: 10px 13px;
+  border: 1px solid var(--borde-suave); border-radius: var(--radio-sm);
+  cursor: pointer; font-size: 13.5px; transition: all var(--transicion);
+}
+.checklist__item:hover { border-color: var(--plummer-azul-medio); background: var(--estado-curso-fondo); }
+.checklist__item input { width: 17px; height: 17px; accent-color: var(--estado-libre-punto); flex-shrink: 0; }
+.checklist__item:has(input:checked) {
+  background: var(--estado-libre-fondo); border-color: var(--estado-libre-punto);
+}
+.grilla-campos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }

@@ -37,6 +37,20 @@ router.get('/catalogo', (req, res) => {
   });
 });
 
+// Detalle completo, imagen incluida. Se pide solo al abrir un estudio:
+// mandar los base64 en cada listado haria pesadisima la respuesta.
+router.get('/:id/detalle', async (req, res, next) => {
+  try {
+    const row = await db.prepare(`
+      SELECT e.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido, p.dni AS paciente_dni
+      FROM estudios_imagenes e JOIN pacientes p ON p.id = e.paciente_id
+      WHERE e.id = ?
+    `).get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Estudio no encontrado' });
+    res.json(row);
+  } catch (err) { next(err); }
+});
+
 router.get('/metricas', async (req, res, next) => {
   try {
     const m = await db.prepare(`
@@ -61,7 +75,11 @@ router.get('/', async (req, res, next) => {
       rows = await db.prepare(`SELECT * FROM estudios_imagenes WHERE paciente_id = ? ORDER BY creado_en DESC`).all(paciente_id);
     } else if (medico_id) {
       rows = await db.prepare(`
-        SELECT e.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido, p.dni AS paciente_dni
+        SELECT e.id, e.paciente_id, e.solicitado_por, e.solicitado_por_medico_id,
+               e.tipo_estudio, e.region, e.prioridad, e.informe, e.estado,
+               e.indicaciones, e.origen_modulo, e.creado_en, e.completado_en,
+               (e.imagen_datos IS NOT NULL) AS tiene_imagen,
+               p.nombre AS paciente_nombre, p.apellido AS paciente_apellido, p.dni AS paciente_dni
         FROM estudios_imagenes e JOIN pacientes p ON p.id = e.paciente_id
         WHERE e.solicitado_por_medico_id = ? ORDER BY e.creado_en DESC
       `).all(medico_id);

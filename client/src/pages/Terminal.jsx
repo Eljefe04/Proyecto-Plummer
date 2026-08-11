@@ -305,6 +305,17 @@ function TabEstudios({ medicoId, pacienteBuscado }) {
   const [enviando, setEnviando] = useState(false);
   const [catalogo, setCatalogo] = useState([]);
   const [verResultado, setVerResultado] = useState(null);
+  const [verImagen, setVerImagen] = useState(null);
+
+  // El detalle (con la placa) se pide recien al abrirlo.
+  async function abrirImagen(est) {
+    try {
+      const completo = await api.get(`/imagenes/${est.id}/detalle`);
+      setVerImagen(completo);
+    } catch {
+      setVerImagen(est);
+    }
+  }
 
   useEffect(() => {
     api.get('/laboratorio/catalogo').then(setCatalogo).catch(() => {});
@@ -383,35 +394,80 @@ function TabEstudios({ medicoId, pacienteBuscado }) {
             );
           })}
 
-          {estudiosImg.map((e) => (
-            <article key={e.id} className="tarjeta-derivacion surgir">
-              <div className="tarjeta-derivacion__cabecera">
-                <div>
-                  {/* Antes acá figuraba la palabra literal "Paciente":
-                      el nombre no llegaba porque la consulta filtrada por
-                      médico no hacía JOIN con la tabla de pacientes. */}
-                  <p className="tarjeta-derivacion__paciente">
-                    {e.paciente_apellido}, {e.paciente_nombre}
-                  </p>
-                  <p className="tarjeta-derivacion__meta">
-                    Imágenes · {e.tipo_estudio}{e.region ? ` (${e.region})` : ''}
-                  </p>
+          {estudiosImg.map((e) => {
+            // Estados en los que el estudio ya está disponible para el médico.
+            // "entregado" faltaba acá y caía en la rama de urgente, por eso
+            // se pintaba en rojo al marcarlo entregado desde Imágenes.
+            const listo = ['realizado', 'informado', 'entregado'].includes(e.estado);
+            return (
+              <article key={e.id} className="tarjeta-derivacion surgir">
+                <div className="tarjeta-derivacion__cabecera">
+                  <div>
+                    <p className="tarjeta-derivacion__paciente">
+                      {e.paciente_apellido}, {e.paciente_nombre}
+                    </p>
+                    <p className="tarjeta-derivacion__meta">
+                      Imágenes · {e.tipo_estudio}{e.region ? ` (${e.region})` : ''}
+                    </p>
+                  </div>
+                  <span className={`estado-chip estado-chip--${
+                    e.estado === 'entregado' ? 'inactivo'
+                    : listo ? 'libre'
+                    : e.prioridad === 'urgente' ? 'urgente' : 'pendiente'
+                  }`}>
+                    {String(e.estado).replace('_', ' ')}
+                  </span>
                 </div>
-                <span className={`estado-chip estado-chip--${
-                  e.estado === 'informado' || e.estado === 'realizado' ? 'libre'
-                  : e.prioridad === 'urgente' ? 'urgente' : 'pendiente'
-                }`}>
-                  {String(e.estado).replace('_', ' ')}
-                </span>
-              </div>
-              {e.informe && (
-                <div className="receta-detalle">
-                  <p className="receta-detalle__indicaciones">{e.informe}</p>
-                </div>
-              )}
-            </article>
-          ))}
+
+                {/* La placa adjuntada por el servicio de Imágenes. */}
+                {e.imagen_datos && (
+                  <img
+                    className="placa-miniatura"
+                    src={e.imagen_datos}
+                    alt={`Placa de ${e.tipo_estudio}`}
+                    onClick={() => setVerImagen(e)}
+                    style={{ cursor: 'zoom-in' }}
+                  />
+                )}
+
+                {e.informe && (
+                  <div className="receta-detalle">
+                    <p className="receta-detalle__indicaciones">{e.informe}</p>
+                  </div>
+                )}
+
+                {(e.imagen_datos || e.informe) && (
+                  <div className="tarjeta-derivacion__pie">
+                    <span />
+                    <Boton variante="secundario" onClick={() => setVerImagen(e)}>
+                      Ver estudio completo
+                    </Boton>
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </div>
+      )}
+
+      {verImagen && (
+        <Modal
+          abierto
+          ancho={720}
+          titulo={`${verImagen.tipo_estudio}${verImagen.region ? ` — ${verImagen.region}` : ''}`}
+          onCerrar={() => setVerImagen(null)}
+        >
+          <p className="receta-detalle__pauta" style={{ marginBottom: 10 }}>
+            {verImagen.paciente_apellido}, {verImagen.paciente_nombre}
+            {verImagen.indicaciones ? ` · Motivo: ${verImagen.indicaciones}` : ''}
+          </p>
+          {verImagen.imagen_datos ? (
+            <img className="placa-grande" src={verImagen.imagen_datos} alt="Placa del estudio" />
+          ) : (
+            <p className="ayuda-campo">El servicio de Imágenes no adjuntó ninguna placa.</p>
+          )}
+          {verImagen.informe && <pre className="informe-texto">{verImagen.informe}</pre>}
+        </Modal>
       )}
 
       {verResultado && (
@@ -422,6 +478,25 @@ function TabEstudios({ medicoId, pacienteBuscado }) {
           onCerrar={() => setVerResultado(null)}
         >
           <TablaResultados estudio={verResultado} />
+        </Modal>
+      )}
+
+      {verImagen && (
+        <Modal
+          abierto
+          ancho={700}
+          titulo={`${verImagen.paciente_apellido}, ${verImagen.paciente_nombre}`}
+          onCerrar={() => setVerImagen(null)}
+        >
+          <p className="receta-detalle__pauta" style={{ marginBottom: 10 }}>
+            {verImagen.tipo_estudio}{verImagen.region ? ` — ${verImagen.region}` : ''}
+          </p>
+          {verImagen.imagen_datos && (
+            <img className="placa-grande" src={verImagen.imagen_datos} alt="Placa del estudio" />
+          )}
+          {verImagen.informe
+            ? <pre className="informe-texto">{verImagen.informe}</pre>
+            : <p className="ayuda-campo">Todavía no hay informe cargado.</p>}
         </Modal>
       )}
 
