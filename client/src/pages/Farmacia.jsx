@@ -1,13 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { api } from '../api';
 import LayoutInterno from '../components/LayoutInterno';
 import Modal from '../components/Modal';
 import { Badge, Boton, TarjetaSeccion, EstadoVacio, Campo } from '../components/ui';
 import { useActualizacionTiempoReal } from '../hooks';
+import RecetasPendientes from './farmacia/RecetasPendientes';
 
-const MENU = [{ titulo: 'Farmacia', items: [{ to: '/farmacia', label: 'Inventario y dispensación', exact: true }] }];
+const MENU = [{
+  titulo: 'Farmacia',
+  items: [
+    { to: '/farmacia/recetas', label: 'Recetas pendientes' },
+    { to: '/farmacia/inventario', label: 'Inventario y dispensación' },
+  ],
+}];
 
-export default function Farmacia() {
+function Inventario() {
   const [medicamentos, setMedicamentos] = useState([]);
   const [dispensaciones, setDispensaciones] = useState([]);
   const [pacientes, setPacientes] = useState([]);
@@ -76,7 +84,7 @@ export default function Farmacia() {
   }
 
   return (
-    <LayoutInterno titulo="Farmacia y Gestión de Stock" menu={MENU}>
+    <>
       <div className="grid-metricas">
         <div className="metrica-card metrica-card--alerta"><p>Stock Bajo</p><strong>{stockBajo.length}</strong><span>medicamentos bajo el mínimo</span></div>
         <div className="metrica-card metrica-card--info"><p>Por Vencer</p><strong>{porVencer.length}</strong><span>vencen en 30 días</span></div>
@@ -190,6 +198,20 @@ export default function Farmacia() {
           </div>
         )}
       </Modal>
+    </>
+  );
+}
+
+// Contenedor del módulo: la bandeja de recetas es lo primero que se ve,
+// porque es de donde tiene que salir toda dispensación.
+export default function Farmacia() {
+  return (
+    <LayoutInterno titulo="Farmacia y Gestión de Stock" menu={MENU}>
+      <Routes>
+        <Route index element={<Navigate to="recetas" replace />} />
+        <Route path="recetas" element={<RecetasPendientes />} />
+        <Route path="inventario" element={<Inventario />} />
+      </Routes>
     </LayoutInterno>
   );
 }

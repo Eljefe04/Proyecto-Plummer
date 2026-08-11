@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db/index');
 const { middlewareAuth, requireRol } = require('../middleware/auth');
 const { registrarAuditoria } = require('../db/auditoria');
-const { emitirActualizacion } = require('../sockets/notificaciones');
+const { emitirNotificacion, emitirActualizacion } = require('../sockets/notificaciones');
 const { nuevoId } = require('./_utils');
 
 const router = express.Router();
@@ -107,29 +107,63 @@ router.get('/dispensaciones', requireRol('farmacia', 'administrador'), async (re
 router.post('/dispensar', requireRol('farmacia', 'administrador'), async (req, res, next) => {
   try {
     const b = req.body;
-    if (!b.paciente_id || !b.medicamento_id || !b.cantidad) {
-      return res.status(400).json({ error: 'Paciente, medicamento y cantidad son obligatorios' });
+    if (!b.medicamento_id || !b.cantidad) {
+      return res.status(400).json({ error: 'Medicamento y cantidad son obligatorios' });
     }
+
+    // ------------------------------------------------------------
+    // DISPENSACION ATADA A LA RECETA
+    //
+    // Si viene una receta, el paciente NO se toma del cuerpo del pedido:
+    // se toma de la receta. Asi es imposible dispensar a un tercero,
+    // ni siquiera manipulando la llamada por fuera de la pantalla.
+    // ------------------------------------------------------------
+    let pacienteId = b.paciente_id;
+    let receta = null;
+
+    if (b.receta_id) {
+      receta = await db.prepare('SELECT * FROM recetas WHERE id = ?').get(b.receta_id);
+      if (!receta) return res.status(404).json({ error: 'La receta no existe' });
+
+      if (receta.estado === 'dispensada') {
+        return res.status(409).json({ error: 'Esta receta ya fue dispensada' });
+      }
+      if (b.paciente_id && b.paciente_id !== receta.paciente_id) {
+        return res.status(409).json({
+          error: 'El paciente no coincide con el de la receta. La medicación solo puede entregarse al paciente indicado.',
+        });
+      }
+      pacienteId = receta.paciente_id;
+    }
+
+    if (!pacienteId) return res.status(400).json({ error: 'Falta indicar el paciente' });
 
     const medicamento = await db.prepare(`SELECT * FROM medicamentos WHERE id = ?`).get(b.medicamento_id);
     if (!medicamento) return res.status(404).json({ error: 'Medicamento no encontrado' });
     if (medicamento.stock < b.cantidad) {
-      return res.status(400).json({ error: 'Stock insuficiente para dispensar esa cantidad' });
+      return res.status(400).json({
+        error: `Stock insuficiente: quedan ${medicamento.stock} unidades de ${medicamento.nombre}`,
+      });
     }
+
+    const paciente = await db.prepare(`SELECT * FROM pacientes WHERE id = ?`).get(pacienteId);
+    if (!paciente) return res.status(404).json({ error: 'El paciente no existe' });
 
     const id = nuevoId();
-    await db.prepare(`
-      INSERT INTO dispensaciones (id, paciente_id, medicamento_id, receta_id, cantidad, indicaciones, dispensado_por)
-      VALUES (?,?,?,?,?,?,?)
-    `).run(id, b.paciente_id, b.medicamento_id, b.receta_id || null, b.cantidad, b.indicaciones || null, req.sesion.nombreCompleto);
+    await db.transaccion(async (tx) => {
+      await tx.prepare(`
+        INSERT INTO dispensaciones (id, paciente_id, medicamento_id, receta_id, cantidad, indicaciones, dispensado_por)
+        VALUES (?,?,?,?,?,?,?)
+      `).run(id, pacienteId, b.medicamento_id, b.receta_id || null, b.cantidad,
+             b.indicaciones || null, req.sesion.nombreCompleto);
 
-    await db.prepare(`UPDATE medicamentos SET stock = stock - ? WHERE id = ?`).run(b.cantidad, b.medicamento_id);
+      await tx.prepare(`UPDATE medicamentos SET stock = stock - ? WHERE id = ?`)
+        .run(b.cantidad, b.medicamento_id);
 
-    if (b.receta_id) {
-      await db.prepare(`UPDATE recetas SET estado = 'dispensada' WHERE id = ?`).run(b.receta_id);
-    }
-
-    const paciente = await db.prepare(`SELECT * FROM pacientes WHERE id = ?`).get(b.paciente_id);
+      if (b.receta_id) {
+        await tx.prepare(`UPDATE recetas SET estado = 'dispensada' WHERE id = ?`).run(b.receta_id);
+      }
+    });
 
     await registrarAuditoria({
       usuario: req.sesion.nombreCompleto,
@@ -141,8 +175,32 @@ router.post('/dispensar', requireRol('farmacia', 'administrador'), async (req, r
     });
 
     emitirActualizacion({ salas: ['rol:farmacia', 'rol:administrador'], recurso: 'medicamentos' });
+    emitirActualizacion({ salas: ['rol:farmacia', 'rol:medico', 'rol:enfermeria'], recurso: 'recetas' });
 
-    res.status(201).json({ ok: true });
+    // El medico que firmo se entera de que su receta ya se entrego.
+    if (receta && receta.medico_id) {
+      emitirNotificacion({
+        destinoRol: 'medico',
+        destinoMedicoId: receta.medico_id,
+        tipo: 'receta_dispensada',
+        titulo: 'Receta dispensada',
+        mensaje: `${medicamento.nombre} x${b.cantidad} entregado a ${paciente.apellido}, ${paciente.nombre}`,
+        pacienteId,
+      });
+    }
+
+    // Enfermeria administra lo que Farmacia entrega a un internado.
+    if (paciente.estado === 'internado') {
+      emitirNotificacion({
+        destinoRol: 'enfermeria',
+        tipo: 'medicacion_disponible',
+        titulo: 'Medicación lista para administrar',
+        mensaje: `${medicamento.nombre} x${b.cantidad} para ${paciente.apellido}, ${paciente.nombre}`,
+        pacienteId,
+      });
+    }
+
+    res.status(201).json({ ok: true, stock_restante: medicamento.stock - b.cantidad });
   } catch (err) { next(err); }
 });
 

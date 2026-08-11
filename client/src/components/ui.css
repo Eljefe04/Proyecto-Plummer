@@ -768,3 +768,47 @@
   border-radius: var(--radio-sm);
   font-size: 13.5px;
 }
+
+/* ---------- Recetas en Farmacia ---------- */
+.receta-detalle {
+  background: var(--fondo-suave, #f5f8fb);
+  border-radius: var(--radio-sm);
+  padding: 10px 13px;
+}
+.receta-detalle__medicamento { font-weight: 700; font-size: 14.5px; color: var(--plummer-azul-medio); }
+.receta-detalle__pauta { font-size: 13px; color: var(--texto-secundario); margin-top: 2px; }
+.receta-detalle__indicaciones { font-size: 13px; margin-top: 6px; font-style: italic; }
+
+.receta-fijada {
+  background: var(--estado-curso-fondo);
+  border-radius: var(--radio-sm);
+  padding: 10px 13px;
+  margin-bottom: 12px;
+}
+.receta-fijada__label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--estado-curso-texto);
+}
+.receta-fijada__valor { font-size: 15px; font-weight: 700; margin-top: 3px; }
+.receta-fijada__meta { font-size: 12.5px; color: var(--texto-secundario); margin-top: 1px; }
+
+.aviso-alergia {
+  background: var(--estado-urgente-fondo);
+  color: var(--estado-urgente-texto);
+  border-left: 3px solid var(--estado-urgente-punto);
+  padding: 9px 12px;
+  border-radius: var(--radio-sm);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.aviso-exito {
+  background: var(--estado-libre-fondo);
+  color: var(--estado-libre-texto);
+  border-left: 3px solid var(--estado-libre-punto);
+  padding: 11px 14px;
+  border-radius: var(--radio-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+}

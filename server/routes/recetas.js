@@ -8,39 +8,88 @@ const { nuevoId } = require('./_utils');
 const router = express.Router();
 router.use(middlewareAuth);
 
+// Consulta unica con los datos que necesita cualquier pantalla:
+// nombre del paciente, medico que firmo y stock del medicamento enlazado.
+// Antes la consulta sin filtro era un SELECT * pelado, sin JOIN, asi que
+// Farmacia no podia saber ni de que paciente era la receta.
+const SELECT_RECETAS = `
+  SELECT r.*,
+         p.nombre   AS paciente_nombre,
+         p.apellido AS paciente_apellido,
+         p.dni      AS paciente_dni,
+         p.alergias AS paciente_alergias,
+         m.nombre   AS medico_nombre,
+         m.apellido AS medico_apellido,
+         m.especialidad AS medico_especialidad,
+         med.nombre AS inventario_nombre,
+         med.stock  AS inventario_stock,
+         med.categoria AS inventario_categoria
+  FROM recetas r
+  LEFT JOIN pacientes p    ON p.id = r.paciente_id
+  LEFT JOIN medicos m      ON m.id = r.medico_id
+  LEFT JOIN medicamentos med ON med.id = r.medicamento_id
+`;
+
 router.get('/', async (req, res, next) => {
   try {
-    const { paciente_id, medico_id } = req.query;
-    let rows;
-    if (paciente_id) {
-      rows = await db.prepare(`SELECT * FROM recetas WHERE paciente_id = ? ORDER BY creado_en DESC`).all(paciente_id);
-    } else if (medico_id) {
-      rows = await db.prepare(`SELECT r.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido
-        FROM recetas r JOIN pacientes p ON p.id = r.paciente_id
-        WHERE r.medico_id = ? ORDER BY r.creado_en DESC`).all(medico_id);
-    } else {
-      rows = await db.prepare(`SELECT * FROM recetas ORDER BY creado_en DESC`).all();
-    }
+    const { paciente_id, medico_id, estado } = req.query;
+    const rows = await db.prepare(`
+      ${SELECT_RECETAS}
+      WHERE (? IS NULL OR r.paciente_id = ?)
+        AND (? IS NULL OR r.medico_id = ?)
+        AND (? IS NULL OR r.estado = ?)
+      ORDER BY r.creado_en DESC
+    `).all(
+      paciente_id || null, paciente_id || null,
+      medico_id || null, medico_id || null,
+      estado || null, estado || null,
+    );
     res.json(rows);
   } catch (err) { next(err); }
 });
 
-router.post('/', requireRol('medico', 'administrador'), async (req, res, next) => {
+// Bandeja de Farmacia: lo que falta dispensar, lo mas viejo primero.
+router.get('/pendientes', async (req, res, next) => {
+  try {
+    const rows = await db.prepare(`
+      ${SELECT_RECETAS}
+      WHERE r.estado = 'pendiente'
+      ORDER BY r.creado_en ASC
+    `).all();
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+router.post('/', requireRol('medico', 'quirofano', 'administrador'), async (req, res, next) => {
   try {
     const b = req.body;
     if (!b.paciente_id || !b.medicamento) {
       return res.status(400).json({ error: 'Paciente y medicamento son obligatorios' });
     }
+    // Una receta la firma un medico matriculado. Si quien la carga no es
+    // un medico (Quirofano o Administrador), tiene que indicar cual, para
+    // que la receta no quede sin responsable.
     const medicoId = b.medico_id || req.sesion.medicoId;
+    if (!medicoId) {
+      return res.status(400).json({
+        error: 'Falta indicar el médico que firma la receta. Seleccionalo de la lista.',
+      });
+    }
+    const firmante = await db.prepare('SELECT * FROM medicos WHERE id = ?').get(medicoId);
+    if (!firmante) return res.status(404).json({ error: 'El médico indicado no existe' });
+
     const id = nuevoId();
 
-    await db.prepare(`
-      INSERT INTO recetas (id, paciente_id, medico_id, medicamento, dosis, via_administracion, frecuencia, duracion_tratamiento, indicaciones)
-      VALUES (?,?,?,?,?,?,?,?,?)
-    `).run(id, b.paciente_id, medicoId, b.medicamento, b.dosis || null, b.via_administracion || null,
-      b.frecuencia || null, b.duracion_tratamiento || null, b.indicaciones || null);
-
     const paciente = await db.prepare(`SELECT * FROM pacientes WHERE id = ?`).get(b.paciente_id);
+    if (!paciente) return res.status(404).json({ error: 'El paciente no existe' });
+
+    // Si el medico eligio del inventario de Farmacia, se guarda el enlace:
+    // asi Farmacia ve el medicamento ya preseleccionado al dispensar.
+    await db.prepare(`
+      INSERT INTO recetas (id, paciente_id, medico_id, medicamento, medicamento_id, dosis, via_administracion, frecuencia, duracion_tratamiento, indicaciones)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `).run(id, b.paciente_id, medicoId, b.medicamento, b.medicamento_id || null, b.dosis || null,
+      b.via_administracion || null, b.frecuencia || null, b.duracion_tratamiento || null, b.indicaciones || null);
 
     await registrarAuditoria({
       usuario: req.sesion.nombreCompleto,
