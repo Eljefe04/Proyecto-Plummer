@@ -92,8 +92,26 @@ app.get('/api/despertar', async (req, res) => {
 // las rutas pasan con next(err) y devuelve un JSON prolijo en vez de
 // que Express devuelva HTML de error por defecto.
 app.use((err, req, res, next) => {
-  console.error('[error]', err);
-  res.status(500).json({ error: 'Error interno del servidor', detalle: err.message });
+  // Se registra el detalle completo en los logs de Render y se devuelve
+  // el motivo al cliente. Antes solo llegaba "Error interno del servidor",
+  // que no dejaba diagnosticar nada desde la pantalla.
+  console.error('[error]', req.method, req.originalUrl, '->', err.message);
+  if (err.stack) console.error(err.stack);
+
+  // Errores de PostgreSQL traducidos a algo legible.
+  const porCodigo = {
+    '23505': 'Ya existe un registro con ese dato único (por ejemplo, un DNI repetido).',
+    '23503': 'El registro hace referencia a algo que no existe.',
+    '23502': 'Falta completar un campo obligatorio.',
+    '23514': 'Un valor no está permitido para ese campo.',
+    '42703': 'La base de datos no tiene una columna que el sistema esperaba. Puede faltar aplicar una migración.',
+  };
+
+  res.status(err.status || 500).json({
+    error: porCodigo[err.code] || err.message || 'Error interno del servidor',
+    codigo: err.code || null,
+    detalle: err.detail || null,
+  });
 });
 
 // ------------------------------------------------------------

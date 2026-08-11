@@ -16,7 +16,12 @@ if (!connectionString) {
 
 const pool = new Pool({
   connectionString,
-  ssl: { rejectUnauthorized: false }, // requerido por Neon
+  // Neon exige SSL; un PostgreSQL local no lo soporta y rechaza la conexion.
+  // Se detecta automaticamente para que el mismo codigo sirva en la nube y
+  // en una PC del colegio sin internet.
+  ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL || '') || process.env.PGSSL === 'disable'
+    ? false
+    : { rejectUnauthorized: false },
 });
 
 // ------------------------------------------------------------

@@ -279,7 +279,7 @@ router.patch('/:id/marcar-libre', requireRol('enfermeria', 'recepcion', 'adminis
 // ------------------------------------------------------------
 router.post('/', requireRol('administrador', 'enfermeria'), async (req, res, next) => {
   try {
-    const { codigo, sector, habitacion = null } = req.body;
+    const { codigo, sector } = req.body;
     if (!codigo || !sector) return res.status(400).json({ error: 'Faltan codigo y sector' });
 
     const existente = await db.prepare('SELECT id FROM camas WHERE codigo = ?').get(codigo);
@@ -287,8 +287,8 @@ router.post('/', requireRol('administrador', 'enfermeria'), async (req, res, nex
 
     const id = uuidv4();
     await db.prepare(
-      "INSERT INTO camas (id, codigo, sector, habitacion, estado) VALUES (?, ?, ?, ?, 'libre')"
-    ).run(id, codigo, sector, habitacion);
+      "INSERT INTO camas (id, codigo, sector, estado) VALUES (?, ?, ?, 'libre')"
+    ).run(id, codigo, sector);
 
     await registrarAuditoria({
         usuario: req.sesion.nombreCompleto,

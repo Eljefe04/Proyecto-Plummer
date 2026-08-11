@@ -50,14 +50,14 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       pacienteId = nuevoId();
       const sufijo = pacienteId.replace(/-/g, '').slice(0, 6).toUpperCase();
       await db.prepare(`
-        INSERT INTO pacientes (id, nombre, apellido, dni, estado, no_identificado, observaciones)
+        INSERT INTO pacientes (id, nombre, apellido, dni, estado, no_identificado, motivo_ingreso)
         VALUES (?, ?, ?, ?, 'ambulatorio', TRUE, ?)
       `).run(
         pacienteId,
         'NN',
         b.nombre_temporal || 'No identificado',
         `NN-${sufijo}`,
-        'Ficha creada por Protocolo NN en Guardia. Completar al identificar al paciente.',
+        b.motivo_consulta || 'Ingreso por Protocolo NN en Guardia',
       );
     }
 
