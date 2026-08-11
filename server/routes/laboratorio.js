@@ -217,7 +217,7 @@ router.patch('/:id/resultado', requireRol('laboratorio', 'administrador'), async
     }
 
     const row = await db.prepare(`SELECT * FROM estudios_laboratorio WHERE id = ?`).get(req.params.id);
-    res.json(hidratar(row));
+    res.json({ ...hidratar(row), valores: listaValores, guardados: listaValores.length, alterados });
   } catch (err) { next(err); }
 });
 

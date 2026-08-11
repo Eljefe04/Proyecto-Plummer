@@ -5,8 +5,53 @@ const { registrarAuditoria } = require('../db/auditoria');
 const { emitirNotificacion, emitirActualizacion } = require('../sockets/notificaciones');
 const { nuevoId } = require('./_utils');
 
+// ------------------------------------------------------------
+// CATALOGO POR MODALIDAD
+// El medico elegia el estudio escribiendolo a mano, asi que Imagenes
+// recibia "Radiografia" a secas sin saber de que parte del cuerpo.
+// ------------------------------------------------------------
+const MODALIDADES = {
+  'Radiografía': ['Tórax', 'Abdomen', 'Columna cervical', 'Columna lumbar', 'Cadera', 'Rodilla', 'Hombro', 'Mano', 'Pie', 'Cráneo'],
+  'Ecografía': ['Abdominal', 'Renal', 'Ginecológica', 'Obstétrica', 'Tiroidea', 'Partes blandas', 'Doppler de miembros'],
+  'Tomografía (TAC)': ['Cerebro', 'Tórax', 'Abdomen y pelvis', 'Columna', 'Senos paranasales'],
+  'Resonancia (RMN)': ['Cerebro', 'Columna cervical', 'Columna lumbar', 'Rodilla', 'Hombro'],
+  'Mamografía': ['Bilateral', 'Unilateral derecha', 'Unilateral izquierda'],
+};
+
+// Plantillas de informe, para no escribir de cero cada vez.
+const PLANTILLAS = {
+  'Radiografía': 'Técnica: proyección frontal y lateral.\nHallazgos: \nConclusión: ',
+  'Ecografía': 'Técnica: transductor convexo.\nHallazgos: \nConclusión: ',
+  'Tomografía (TAC)': 'Técnica: cortes axiales sin contraste.\nHallazgos: \nConclusión: ',
+  'Resonancia (RMN)': 'Técnica: secuencias T1, T2 y STIR.\nHallazgos: \nConclusión: ',
+  'Mamografía': 'Técnica: proyecciones craneocaudal y oblicua.\nHallazgos: \nCategoría BI-RADS: \nConclusión: ',
+};
+
 const router = express.Router();
 router.use(middlewareAuth);
+
+router.get('/catalogo', (req, res) => {
+  res.json({
+    modalidades: Object.entries(MODALIDADES).map(([nombre, regiones]) => ({ nombre, regiones })),
+    plantillas: PLANTILLAS,
+  });
+});
+
+router.get('/metricas', async (req, res, next) => {
+  try {
+    const m = await db.prepare(`
+      SELECT
+        COUNT(*) FILTER (WHERE estado = 'pendiente')  AS pendientes,
+        COUNT(*) FILTER (WHERE estado = 'en_sala')    AS en_sala,
+        COUNT(*) FILTER (WHERE estado = 'realizado')  AS sin_informar,
+        COUNT(*) FILTER (WHERE estado = 'pendiente' AND prioridad = 'urgente') AS urgentes,
+        COUNT(*) FILTER (WHERE estado IN ('informado','entregado')
+                          AND completado_en::date = CURRENT_DATE) AS informados_hoy
+      FROM estudios_imagenes
+    `).get();
+    res.json(m);
+  } catch (err) { next(err); }
+});
 
 router.get('/', async (req, res, next) => {
   try {
@@ -41,9 +86,9 @@ router.post('/', requireRol('medico', 'recepcion', 'administrador'), async (req,
     const medicoId = req.sesion.rol === 'medico' ? req.sesion.medicoId : (b.solicitado_por_medico_id || null);
 
     await db.prepare(`
-      INSERT INTO estudios_imagenes (id, paciente_id, solicitado_por, solicitado_por_medico_id, tipo_estudio, region, prioridad)
-      VALUES (?,?,?,?,?,?,?)
-    `).run(id, b.paciente_id, req.sesion.nombreCompleto, medicoId, b.tipo_estudio, b.region || null, b.prioridad || 'normal');
+      INSERT INTO estudios_imagenes (id, paciente_id, solicitado_por, solicitado_por_medico_id, tipo_estudio, region, prioridad, indicaciones, origen_modulo)
+      VALUES (?,?,?,?,?,?,?,?,?)
+    `).run(id, b.paciente_id, req.sesion.nombreCompleto, medicoId, b.tipo_estudio, b.region || null, b.prioridad || 'normal', b.indicaciones || null, b.origen_modulo || req.sesion.rol);
 
     const paciente = await db.prepare(`SELECT * FROM pacientes WHERE id = ?`).get(b.paciente_id);
 
@@ -70,6 +115,52 @@ router.post('/', requireRol('medico', 'recepcion', 'administrador'), async (req,
   } catch (err) { next(err); }
 });
 
+router.patch('/:id/estado', requireRol('imagenes', 'administrador'), async (req, res, next) => {
+  try {
+    const { estado } = req.body;
+    const validos = ['pendiente', 'en_sala', 'realizado', 'informado', 'entregado'];
+    if (!validos.includes(estado)) {
+      return res.status(400).json({ error: `Estado no valido. Debe ser uno de: ${validos.join(', ')}` });
+    }
+    const actual = await db.prepare('SELECT * FROM estudios_imagenes WHERE id = ?').get(req.params.id);
+    if (!actual) return res.status(404).json({ error: 'Estudio no encontrado' });
+
+    await db.prepare('UPDATE estudios_imagenes SET estado = ? WHERE id = ?').run(estado, req.params.id);
+    emitirActualizacion({ salas: ['rol:imagenes', 'rol:medico'], recurso: 'estudios_imagenes' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// La placa se guarda DENTRO de Postgres, no en disco: el disco de Render
+// es efimero y se borra en cada reinicio. El navegador la comprime antes
+// de subirla para que no ocupe de mas.
+router.patch('/:id/imagen', requireRol('imagenes', 'administrador'), async (req, res, next) => {
+  try {
+    const { imagen_datos } = req.body;
+    if (!imagen_datos) return res.status(400).json({ error: 'No se recibio ninguna imagen' });
+    if (imagen_datos.length > 1400000) {
+      return res.status(413).json({ error: 'La imagen es demasiado grande. Maximo aproximado: 1 MB.' });
+    }
+    const actual = await db.prepare('SELECT * FROM estudios_imagenes WHERE id = ?').get(req.params.id);
+    if (!actual) return res.status(404).json({ error: 'Estudio no encontrado' });
+
+    await db.prepare('UPDATE estudios_imagenes SET imagen_datos = ? WHERE id = ?')
+      .run(imagen_datos, req.params.id);
+
+    await registrarAuditoria({
+      usuario: req.sesion.nombreCompleto,
+      rol: req.sesion.rol,
+      accion: 'modificacion',
+      modulo: 'imagenes',
+      descripcion: `Imagen adjuntada al estudio ${actual.tipo_estudio}`,
+      pacienteId: actual.paciente_id,
+    });
+
+    emitirActualizacion({ salas: ['rol:imagenes', 'rol:medico'], recurso: 'estudios_imagenes' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 router.patch('/:id/informe', requireRol('imagenes', 'administrador'), async (req, res, next) => {
   try {
     const { informe } = req.body;
@@ -91,6 +182,10 @@ router.patch('/:id/informe', requireRol('imagenes', 'administrador'), async (req
       pacienteId: paciente.id,
     });
 
+    const estadoNuevo = 'informado';
+    await db.prepare("UPDATE estudios_imagenes SET estado = ? WHERE id = ?")
+      .run(estadoNuevo, req.params.id);
+
     if (actual.solicitado_por_medico_id) {
       emitirNotificacion({
         destinoRol: 'medico',
@@ -101,6 +196,19 @@ router.patch('/:id/informe', requireRol('imagenes', 'administrador'), async (req
         pacienteId: paciente.id,
       });
       emitirActualizacion({ salas: [`medico:${actual.solicitado_por_medico_id}`], recurso: 'estudios_imagenes' });
+    } else {
+      // ARREGLO: antes, si el estudio lo pedia Recepcion o Guardia, el
+      // campo de medico quedaba en null y el informe se cargaba sin que
+      // se enterara NADIE. Ahora vuelve al modulo que lo solicito.
+      const destino = actual.origen_modulo || 'recepcion';
+      emitirNotificacion({
+        destinoRol: destino,
+        tipo: 'informe_listo',
+        titulo: 'Informe de imágenes disponible',
+        mensaje: `${actual.tipo_estudio}${actual.region ? ` (${actual.region})` : ''} — informe cargado`,
+        pacienteId: actual.paciente_id,
+      });
+      emitirActualizacion({ destinos: [destino], recurso: 'estudios_imagenes' });
     }
 
     const row = await db.prepare(`SELECT * FROM estudios_imagenes WHERE id = ?`).get(req.params.id);

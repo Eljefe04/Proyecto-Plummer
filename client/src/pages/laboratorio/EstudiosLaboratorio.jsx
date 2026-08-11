@@ -73,8 +73,13 @@ export default function EstudiosLaboratorio() {
         );
       }
     }
+    // Si el estudio no coincide con ninguno del catálogo (por ejemplo los
+    // cargados antes con texto libre), se arranca con filas vacías EDITABLES
+    // en vez de una fila muerta cuyo nombre no se podía escribir.
     if (filas.length === 0) {
-      filas.push({ analito: '', valor: '', unidad: '', min: null, max: null, grupo: 'Otros' });
+      for (let i = 0; i < 3; i++) {
+        filas.push({ analito: '', valor: '', unidad: '', min: null, max: null, grupo: 'Libre' });
+      }
     }
     // Si ya tenía valores cargados, se respetan para poder corregir.
     if (est.valores && est.valores.length) {
@@ -86,8 +91,16 @@ export default function EstudiosLaboratorio() {
     setValores(filas);
   }
 
-  function cambiarValor(i, v) {
-    setValores((prev) => prev.map((f, idx) => (idx === i ? { ...f, valor: v } : f)));
+  function cambiarCampo(i, campo, v) {
+    setValores((prev) => prev.map((f, idx) => (idx === i ? { ...f, [campo]: v } : f)));
+  }
+
+  function agregarFila() {
+    setValores((prev) => [...prev, { analito: '', valor: '', unidad: '', min: null, max: null, grupo: 'Libre' }]);
+  }
+
+  function quitarFila(i) {
+    setValores((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function fueraDeRango(f) {
@@ -101,10 +114,31 @@ export default function EstudiosLaboratorio() {
   async function guardar(e) {
     e.preventDefault();
     setError('');
+
+    // Una fila solo cuenta si tiene NOMBRE y VALOR. Antes, si el analito
+    // quedaba vacío, el servidor la descartaba sin decir nada y al médico
+    // le llegaba un resultado sin valores.
+    const cargables = valores.filter(
+      (v) => String(v.analito).trim() !== '' && String(v.valor).trim() !== ''
+    );
+
+    if (cargables.length === 0 && !observacion.trim()) {
+      setError('Cargá al menos un valor con su nombre, o escribí una observación.');
+      return;
+    }
+
+    const sinNombre = valores.filter(
+      (v) => String(v.valor).trim() !== '' && String(v.analito).trim() === ''
+    );
+    if (sinNombre.length > 0) {
+      setError(`Hay ${sinNombre.length} valor(es) sin nombre de analito. Completalos o borrá esas filas.`);
+      return;
+    }
+
     try {
       await api.patch(`/laboratorio/${cargando.id}/resultado`, {
         resultado: observacion || null,
-        valores: valores.filter((v) => v.valor !== ''),
+        valores: cargables,
       });
       destellar(cargando.id);
       setCargando(null);
@@ -273,28 +307,64 @@ export default function EstudiosLaboratorio() {
 
             <table className="tabla tabla-responsive tabla-resultados">
               <thead>
-                <tr><th>Analito</th><th>Valor</th><th>Unidad</th><th>Referencia</th></tr>
+                <tr><th>Analito</th><th>Valor</th><th>Unidad</th><th>Referencia</th><th /></tr>
               </thead>
               <tbody>
-                {valores.map((f, i) => (
-                  <tr key={`${f.analito}-${i}`} className={fueraDeRango(f) ? 'fila--alterada' : ''}>
-                    <td data-label="Analito">{f.analito}</td>
-                    <td data-label="Valor">
-                      <input
-                        className={fueraDeRango(f) ? 'input-alterado' : ''}
-                        value={f.valor}
-                        onChange={(ev) => cambiarValor(i, ev.target.value)}
-                        placeholder="—"
-                      />
-                    </td>
-                    <td data-label="Unidad">{f.unidad}</td>
-                    <td data-label="Referencia">
-                      {f.min !== null && f.max !== null ? `${f.min} – ${f.max}` : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {valores.map((f, i) => {
+                  const delCatalogo = f.grupo !== 'Libre';
+                  return (
+                    <tr key={i} className={fueraDeRango(f) ? 'fila--alterada' : ''}>
+                      <td data-label="Analito">
+                        {delCatalogo ? (
+                          <strong>{f.analito}</strong>
+                        ) : (
+                          <input
+                            className="input-analito"
+                            value={f.analito}
+                            onChange={(ev) => cambiarCampo(i, 'analito', ev.target.value)}
+                            placeholder="Nombre del analito"
+                          />
+                        )}
+                      </td>
+                      <td data-label="Valor">
+                        <input
+                          className={fueraDeRango(f) ? 'input-alterado' : ''}
+                          value={f.valor}
+                          onChange={(ev) => cambiarCampo(i, 'valor', ev.target.value)}
+                          placeholder="—"
+                        />
+                      </td>
+                      <td data-label="Unidad">
+                        {delCatalogo ? f.unidad : (
+                          <input
+                            className="input-unidad"
+                            value={f.unidad || ''}
+                            onChange={(ev) => cambiarCampo(i, 'unidad', ev.target.value)}
+                            placeholder="mg/dL"
+                          />
+                        )}
+                      </td>
+                      <td data-label="Referencia">
+                        {f.min !== null && f.min !== undefined && f.max !== null && f.max !== undefined
+                          ? `${f.min} – ${f.max}`
+                          : '—'}
+                      </td>
+                      <td data-label="">
+                        {!delCatalogo && (
+                          <button type="button" className="quitar-fila" onClick={() => quitarFila(i)}>
+                            ×
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+
+            <button type="button" className="agregar-fila" onClick={agregarFila}>
+              + Agregar otro valor
+            </button>
 
             <label className="campo">
               <span className="campo__label">Observaciones del laboratorio</span>

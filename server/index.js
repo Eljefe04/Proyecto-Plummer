@@ -3,7 +3,7 @@ require('dotenv').config();
 // Marcador de version: aparece en los logs de Render al arrancar.
 // Sirve para saber de un vistazo QUE codigo esta corriendo realmente,
 // sin tener que deducirlo de un numero de linea en un stack trace.
-const VERSION_BUILD = '2026-08-11 · laboratorio con rangos de referencia';
+const VERSION_BUILD = '2026-08-11 · imagenes + fix planilla laboratorio';
 
 const express = require('express');
 const http = require('http');
