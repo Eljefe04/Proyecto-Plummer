@@ -32,6 +32,35 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       return res.status(400).json({ error: 'Nivel de triage y motivo de consulta son obligatorios' });
     }
 
+    // ------------------------------------------------------------
+    // PROTOCOLO NN
+    //
+    // Antes el ingreso NN quedaba SOLO como fila en guardia_ingresos,
+    // con paciente_id en null. Como camas.paciente_id referencia a
+    // pacientes, no habia a quien asignarle una cama: el paciente
+    // aparecia en guardia pero era imposible internarlo.
+    //
+    // Ahora se le crea una ficha real con identidad provisoria, que es
+    // lo que hace un hospital de verdad: historia clinica temporal que
+    // despues se completa al identificarlo.
+    // ------------------------------------------------------------
+    let pacienteId = b.paciente_id || null;
+
+    if (b.protocolo_nn && !pacienteId) {
+      pacienteId = nuevoId();
+      const sufijo = pacienteId.replace(/-/g, '').slice(0, 6).toUpperCase();
+      await db.prepare(`
+        INSERT INTO pacientes (id, nombre, apellido, dni, estado, no_identificado, observaciones)
+        VALUES (?, ?, ?, ?, 'ambulatorio', TRUE, ?)
+      `).run(
+        pacienteId,
+        'NN',
+        b.nombre_temporal || 'No identificado',
+        `NN-${sufijo}`,
+        'Ficha creada por Protocolo NN en Guardia. Completar al identificar al paciente.',
+      );
+    }
+
     const id = nuevoId();
     await db.prepare(`
       INSERT INTO guardia_ingresos (
@@ -40,7 +69,7 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
         signos_vitales, observaciones, tags, cama_id, derivacion_destino
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
-      id, b.paciente_id || null, !!b.protocolo_nn, b.nombre_temporal || null,
+      id, pacienteId, !!b.protocolo_nn, b.nombre_temporal || null,
       b.medio_transporte || 'particular', b.acompanante_nombre || null, b.acompanante_vinculo || null,
       b.nivel_triage, b.motivo_consulta, b.signos_vitales || null, b.observaciones || null,
       JSON.stringify(b.tags || []), b.cama_id || null, b.derivacion_destino || null
@@ -51,8 +80,9 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       rol: req.sesion.rol,
       accion: 'creacion',
       modulo: 'guardia',
-      descripcion: `Ingreso a guardia registrado (triage nivel ${b.nivel_triage})`,
-      pacienteId: b.paciente_id || null,
+      descripcion: `Ingreso a guardia registrado (triage nivel ${b.nivel_triage})` +
+        (b.protocolo_nn ? ' — Protocolo NN, ficha provisoria creada' : ''),
+      pacienteId,
     });
 
     // Si el ingreso vino con cama elegida, se marca ocupada Y el paciente
@@ -62,9 +92,9 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       await db.transaccion(async (tx) => {
         await tx.prepare(
           "UPDATE camas SET estado = 'ocupada', paciente_id = ?, limpieza_desde = NULL WHERE id = ?"
-        ).run(b.paciente_id || null, b.cama_id);
-        if (b.paciente_id) {
-          await tx.prepare("UPDATE pacientes SET estado = 'internado' WHERE id = ?").run(b.paciente_id);
+        ).run(pacienteId, b.cama_id);
+        if (pacienteId) {
+          await tx.prepare("UPDATE pacientes SET estado = 'internado' WHERE id = ?").run(pacienteId);
         }
       });
       emitirActualizacion({
@@ -77,13 +107,13 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       });
     }
 
-    if (b.pre_orden_estudios && b.paciente_id) {
+    if (b.pre_orden_estudios && pacienteId) {
       const preOrdenId = nuevoId();
       await db.prepare(`
         INSERT INTO estudios_laboratorio (id, paciente_id, solicitado_por, estudios, prioridad, indicaciones)
         VALUES (?,?,?,?,?,?)
       `).run(
-        preOrdenId, b.paciente_id, req.sesion.nombreCompleto,
+        preOrdenId, pacienteId, req.sesion.nombreCompleto,
         JSON.stringify(['Hemograma', 'Glucemia', 'Coagulograma']), 'urgente',
         'Pre-orden solicitada desde Guardia'
       );
@@ -93,7 +123,7 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
         tipo: 'preorden_guardia',
         titulo: 'Pre-orden urgente desde Guardia',
         mensaje: `Estudios solicitados para paciente en Guardia (triage ${b.nivel_triage})`,
-        pacienteId: b.paciente_id,
+        pacienteId,
       });
       emitirActualizacion({ salas: ['rol:laboratorio'], recurso: 'estudios_laboratorio' });
     }
@@ -106,7 +136,7 @@ router.post('/', requireRol('administrador', 'recepcion'), async (req, res, next
       tipo: 'ingreso_guardia',
       titulo: urgente ? `Ingreso a Guardia — TRIAGE ${b.nivel_triage}` : 'Nuevo ingreso a Guardia',
       mensaje: `${b.motivo_consulta}${b.cama_id ? ' (con cama asignada)' : ''}`,
-      pacienteId: b.paciente_id || null,
+      pacienteId,
       prioridad: urgente ? 'urgente' : 'normal',
     });
 
@@ -214,6 +244,50 @@ router.delete('/:id', requireRol('administrador', 'recepcion'), async (req, res,
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
+
+// Completar la identidad de un paciente NN cuando se lo reconoce.
+router.patch('/:id/identificar', requireRol('administrador', 'recepcion', 'enfermeria'),
+  async (req, res, next) => {
+    try {
+      const { nombre, apellido, dni } = req.body;
+      if (!nombre || !apellido || !dni) {
+        return res.status(400).json({ error: 'Nombre, apellido y DNI son obligatorios' });
+      }
+
+      const ingreso = await db.prepare('SELECT * FROM guardia_ingresos WHERE id = ?').get(req.params.id);
+      if (!ingreso) return res.status(404).json({ error: 'Ingreso no encontrado' });
+      if (!ingreso.paciente_id) return res.status(409).json({ error: 'El ingreso no tiene ficha asociada' });
+
+      const repetido = await db.prepare('SELECT id FROM pacientes WHERE dni = ? AND id <> ?')
+        .get(dni, ingreso.paciente_id);
+      if (repetido) return res.status(409).json({ error: `Ya existe un paciente con DNI ${dni}` });
+
+      await db.prepare(`
+        UPDATE pacientes
+        SET nombre = ?, apellido = ?, dni = ?, no_identificado = FALSE
+        WHERE id = ?
+      `).run(nombre, apellido, dni, ingreso.paciente_id);
+
+      await db.prepare("UPDATE guardia_ingresos SET protocolo_nn = FALSE WHERE id = ?").run(req.params.id);
+
+      await registrarAuditoria({
+        usuario: req.sesion.nombreCompleto,
+        rol: req.sesion.rol,
+        accion: 'modificacion',
+        modulo: 'guardia',
+        descripcion: `Paciente NN identificado como ${apellido}, ${nombre} (DNI ${dni})`,
+        pacienteId: ingreso.paciente_id,
+      });
+
+      emitirActualizacion({
+        salas: ['rol:recepcion', 'rol:enfermeria', 'rol:medico'],
+        recurso: 'guardia',
+      });
+      emitirActualizacion({ salas: ['rol:enfermeria', 'rol:recepcion'], recurso: 'internados' });
+
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  });
 
 function hidratar(row) {
   return { ...row, tags: parseJsonSafe(row.tags, []) };

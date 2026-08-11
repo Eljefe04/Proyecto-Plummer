@@ -255,3 +255,7 @@
 .layout__toast--urgente .layout__toast-icono {
   color: var(--estado-urgente-punto);
 }
+
+.campana-envoltorio { position: relative; display: inline-flex; }
+.campana-envoltorio--claro .campana { color: rgba(255, 255, 255, 0.92); }
+.campana-envoltorio--claro .campana:hover { background: rgba(255, 255, 255, 0.16); }

@@ -147,3 +147,9 @@
   color: var(--plummer-azul-medio);
   border-bottom-color: var(--plummer-azul-medio);
 }
+
+.terminal__acciones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

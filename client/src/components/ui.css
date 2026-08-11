@@ -753,3 +753,9 @@
   .tarjeta-derivacion__pie { flex-direction: column; align-items: stretch; }
   .tarjeta-derivacion__pie .boton { width: 100%; }
 }
+
+.tarjeta-derivacion__botones { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .tarjeta-derivacion__botones { width: 100%; }
+  .tarjeta-derivacion__botones .boton { flex: 1; }
+}

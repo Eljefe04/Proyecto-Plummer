@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import CampanaNotificaciones from '../components/CampanaNotificaciones';
+import BandejaDerivaciones from '../components/BandejaDerivaciones';
 import { api } from '../api';
 import { useActualizacionTiempoReal } from '../hooks';
 import { Badge, Boton, TarjetaSeccion, EstadoVacio, Campo } from '../components/ui';
@@ -19,6 +21,7 @@ const ESPECIALIDAD_INFO = {
 };
 
 const TABS = [
+  { valor: 'recibidas', label: 'Derivaciones recibidas' },
   { valor: 'turnos', label: 'Turnos de Hoy' },
   { valor: 'estudios', label: 'Estudios' },
   { valor: 'recetas', label: 'Recetas Digitales' },
@@ -65,7 +68,13 @@ export default function Terminal() {
           <LogoPlummer size={30} />
           <span>Proyecto Plummer</span>
         </div>
-        <button className="terminal__salir" onClick={logout}>Cerrar sesión</button>
+        <div className="terminal__acciones">
+          {/* La terminal medica era el unico modulo sin notificaciones:
+              no usa LayoutInterno, asi que nunca recibia avisos de turnos,
+              resultados ni derivaciones. */}
+          <CampanaNotificaciones claro />
+          <button className="terminal__salir" onClick={logout}>Cerrar sesión</button>
+        </div>
       </header>
 
       <div className="terminal__body">
@@ -107,6 +116,14 @@ export default function Terminal() {
           ))}
         </div>
 
+        {tab === 'recibidas' && medico && (
+          <BandejaDerivaciones
+            destinos={[medico.especialidad]}
+            titulo="Derivaciones recibidas"
+            subtitulo={`Pacientes derivados a ${ESPECIALIDAD_INFO[medico.especialidad]?.label || medico.especialidad}`}
+            onSeleccionar={(p) => { setPacienteBuscado(p); setTab('especifico'); }}
+          />
+        )}
         {tab === 'turnos' && <TabTurnos turnosHoy={turnosHoy} />}
         {tab === 'estudios' && <TabEstudios medicoId={usuario?.medicoId} pacienteBuscado={pacienteBuscado} />}
         {tab === 'recetas' && <TabRecetas medicoId={usuario?.medicoId} pacienteBuscado={pacienteBuscado} />}

@@ -495,3 +495,11 @@ CREATE INDEX IF NOT EXISTS idx_camas_estado         ON camas(estado);
 CREATE INDEX IF NOT EXISTS idx_recetas_estado       ON recetas(estado);
 CREATE INDEX IF NOT EXISTS idx_derivaciones_destino ON derivaciones(destino, estado);
 CREATE INDEX IF NOT EXISTS idx_cirugias_estado      ON cirugias(estado);
+
+-- Paciente no identificado (Protocolo NN).
+-- Un ingreso NN necesita una ficha real de paciente aunque no se
+-- sepa quien es: sin fila en `pacientes` no se le puede asignar cama
+-- (camas.paciente_id la referencia), no puede internarse ni tener
+-- historia clinica. Se le crea una ficha temporal con DNI provisorio
+-- que despues se completa al identificarlo, igual que en un hospital real.
+ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS no_identificado BOOLEAN NOT NULL DEFAULT FALSE;
