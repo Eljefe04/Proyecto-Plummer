@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import CampanaNotificaciones from '../components/CampanaNotificaciones';
 import BandejaDerivaciones from '../components/BandejaDerivaciones';
+import { TablaResultados } from './laboratorio/EstudiosLaboratorio';
 import { api } from '../api';
 import { useActualizacionTiempoReal } from '../hooks';
 import { Badge, Boton, TarjetaSeccion, EstadoVacio, Campo } from '../components/ui';
@@ -302,6 +303,12 @@ function TabEstudios({ medicoId, pacienteBuscado }) {
   const [nombreEstudio, setNombreEstudio] = useState('');
   const [prioridad, setPrioridad] = useState('normal');
   const [enviando, setEnviando] = useState(false);
+  const [catalogo, setCatalogo] = useState([]);
+  const [verResultado, setVerResultado] = useState(null);
+
+  useEffect(() => {
+    api.get('/laboratorio/catalogo').then(setCatalogo).catch(() => {});
+  }, []);
 
   const cargar = useCallback(() => {
     if (!medicoId) return;
@@ -340,17 +347,82 @@ function TabEstudios({ medicoId, pacienteBuscado }) {
       {[...estudiosLab, ...estudiosImg].length === 0 ? (
         <EstadoVacio texto="No hay estudios solicitados." />
       ) : (
-        <table className="tabla">
-          <thead><tr><th>Paciente</th><th>Estudio</th><th>Prioridad</th><th>Estado</th></tr></thead>
-          <tbody>
-            {estudiosLab.map((e) => (
-              <tr key={e.id}><td>{e.paciente_nombre} {e.paciente_apellido}</td><td>{e.estudios.join(', ')}</td><td><Badge tipo={e.prioridad === 'urgente' ? 'peligro' : 'neutro'}>{e.prioridad}</Badge></td><td><Badge tipo={e.estado === 'realizado' ? 'exito' : 'alerta'}>{e.estado}</Badge></td></tr>
-            ))}
-            {estudiosImg.map((e) => (
-              <tr key={e.id}><td>Paciente</td><td>{e.tipo_estudio}</td><td><Badge tipo={e.prioridad === 'urgente' ? 'peligro' : 'neutro'}>{e.prioridad}</Badge></td><td><Badge tipo={e.estado === 'realizado' ? 'exito' : 'alerta'}>{e.estado}</Badge></td></tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="lista-derivaciones">
+          {estudiosLab.map((e) => {
+            const alterados = (e.valores || []).filter((v) => v.fuera_de_rango).length;
+            const listo = e.estado === 'realizado';
+            return (
+              <article key={e.id} className="tarjeta-derivacion surgir">
+                <div className="tarjeta-derivacion__cabecera">
+                  <div>
+                    <p className="tarjeta-derivacion__paciente">
+                      {e.paciente_apellido}, {e.paciente_nombre}
+                    </p>
+                    <p className="tarjeta-derivacion__meta">
+                      Laboratorio · {e.estudios.join(' · ')}
+                    </p>
+                  </div>
+                  <span className={`estado-chip estado-chip--${
+                    listo ? (alterados > 0 ? 'urgente' : 'libre')
+                    : e.prioridad === 'urgente' ? 'urgente' : 'pendiente'
+                  }`}>
+                    {listo
+                      ? (alterados > 0 ? `${alterados} fuera de rango` : 'Resultado normal')
+                      : String(e.estado).replace('_', ' ')}
+                  </span>
+                </div>
+                {listo && (
+                  <div className="tarjeta-derivacion__pie">
+                    <span />
+                    <Boton variante="secundario" onClick={() => setVerResultado(e)}>
+                      Ver resultado
+                    </Boton>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+
+          {estudiosImg.map((e) => (
+            <article key={e.id} className="tarjeta-derivacion surgir">
+              <div className="tarjeta-derivacion__cabecera">
+                <div>
+                  {/* Antes acá figuraba la palabra literal "Paciente":
+                      el nombre no llegaba porque la consulta filtrada por
+                      médico no hacía JOIN con la tabla de pacientes. */}
+                  <p className="tarjeta-derivacion__paciente">
+                    {e.paciente_apellido}, {e.paciente_nombre}
+                  </p>
+                  <p className="tarjeta-derivacion__meta">
+                    Imágenes · {e.tipo_estudio}{e.region ? ` (${e.region})` : ''}
+                  </p>
+                </div>
+                <span className={`estado-chip estado-chip--${
+                  e.estado === 'informado' || e.estado === 'realizado' ? 'libre'
+                  : e.prioridad === 'urgente' ? 'urgente' : 'pendiente'
+                }`}>
+                  {String(e.estado).replace('_', ' ')}
+                </span>
+              </div>
+              {e.informe && (
+                <div className="receta-detalle">
+                  <p className="receta-detalle__indicaciones">{e.informe}</p>
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+
+      {verResultado && (
+        <Modal
+          abierto
+          ancho={680}
+          titulo={`${verResultado.paciente_apellido}, ${verResultado.paciente_nombre}`}
+          onCerrar={() => setVerResultado(null)}
+        >
+          <TablaResultados estudio={verResultado} />
+        </Modal>
       )}
 
       <Modal titulo="Solicitar Estudio" abierto={modalAbierto} onCerrar={() => setModalAbierto(false)}>

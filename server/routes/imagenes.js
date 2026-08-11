@@ -15,7 +15,11 @@ router.get('/', async (req, res, next) => {
     if (paciente_id) {
       rows = await db.prepare(`SELECT * FROM estudios_imagenes WHERE paciente_id = ? ORDER BY creado_en DESC`).all(paciente_id);
     } else if (medico_id) {
-      rows = await db.prepare(`SELECT * FROM estudios_imagenes WHERE solicitado_por_medico_id = ? ORDER BY creado_en DESC`).all(medico_id);
+      rows = await db.prepare(`
+        SELECT e.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido, p.dni AS paciente_dni
+        FROM estudios_imagenes e JOIN pacientes p ON p.id = e.paciente_id
+        WHERE e.solicitado_por_medico_id = ? ORDER BY e.creado_en DESC
+      `).all(medico_id);
     } else {
       rows = await db.prepare(`
         SELECT e.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido, p.dni AS paciente_dni

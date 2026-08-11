@@ -846,3 +846,53 @@
   .turno-acciones .boton { flex: 1; }
   .mini-tabs { width: 100%; overflow-x: auto; }
 }
+
+/* ---------- Panel de métricas ---------- */
+.metricas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; }
+.metrica {
+  background: var(--fondo-tarjeta); border: 1px solid var(--borde-suave);
+  border-left: 3px solid var(--estado-inactivo-punto);
+  border-radius: var(--radio-sm); padding: 13px 15px;
+}
+.metrica--pendiente { border-left-color: var(--estado-pendiente-punto); }
+.metrica--curso     { border-left-color: var(--estado-curso-punto); }
+.metrica--urgente   { border-left-color: var(--estado-urgente-punto); }
+.metrica--libre     { border-left-color: var(--estado-libre-punto); }
+.metrica__valor { font-size: 26px; font-weight: 800; line-height: 1; color: var(--texto-principal); }
+.metrica__label {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--texto-secundario); margin-top: 4px;
+}
+@media (max-width: 860px) { .metricas { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---------- Etapas del estudio ---------- */
+.etapas { display: flex; gap: 4px; flex-wrap: wrap; }
+.etapa {
+  border: 1px solid var(--borde-suave); background: #fff; cursor: pointer;
+  padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  color: var(--texto-secundario); transition: all var(--transicion);
+}
+.etapa:hover { border-color: var(--plummer-azul-medio); color: var(--plummer-azul-medio); }
+.etapa--activa {
+  background: var(--plummer-azul-medio); border-color: var(--plummer-azul-medio); color: #fff;
+}
+
+/* ---------- Tabla de resultados ---------- */
+.tabla-resultados input {
+  width: 110px; padding: 6px 9px; border: 1px solid var(--borde-suave);
+  border-radius: var(--radio-sm); font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.input-alterado {
+  border-color: var(--estado-urgente-punto) !important;
+  background: var(--estado-urgente-fondo);
+  font-weight: 700; color: var(--estado-urgente-texto);
+}
+.fila--alterada { background: var(--estado-urgente-fondo); }
+.fila--alterada td { color: var(--estado-urgente-texto); }
+.flecha-rango { margin-left: 6px; font-size: 11px; color: var(--estado-urgente-punto); }
+
+.buscador-simple {
+  padding: 8px 13px; border: 1px solid var(--borde-suave);
+  border-radius: 999px; font-size: 13px; min-width: 230px;
+}
+@media (max-width: 860px) { .buscador-simple { width: 100%; min-width: 0; } }
