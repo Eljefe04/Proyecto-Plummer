@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../../api';
-import { Boton, TarjetaSeccion, EstadoVacio } from '../../components/ui';
+import { TarjetaSeccion, EstadoVacio } from '../../components/ui';
+import BandejaDerivaciones from '../../components/BandejaDerivaciones';
 import { useActualizacionTiempoReal, useDestelloActualizacion } from '../../hooks';
 
 const NOMBRE_DESTINO = {
@@ -62,65 +63,11 @@ export default function DerivacionesEnfermeria() {
     <div className="pila-secciones">
       {error && <div className="aviso-error">{error}</div>}
 
-      <TarjetaSeccion
+      <BandejaDerivaciones
+        destinos={['internacion', 'terapia_intensiva', 'guardia']}
         titulo="Derivaciones recibidas"
         subtitulo="Pacientes derivados a Internación, Terapia Intensiva o Guardia"
-        acciones={
-          pendientes.length > 0 && (
-            <span className="estado-chip estado-chip--pendiente">
-              {pendientes.length} sin atender
-            </span>
-          )
-        }
-      >
-        {pendientes.length === 0 ? (
-          <EstadoVacio texto="No hay derivaciones pendientes." />
-        ) : (
-          <div className="lista-derivaciones">
-            {pendientes.map((d) => (
-              <article
-                key={d.id}
-                className={`tarjeta-derivacion surgir ${claseDe(d.id)} ${
-                  d.prioridad === 'urgente' ? 'tarjeta-derivacion--urgente' : ''
-                }`}
-              >
-                <div className="tarjeta-derivacion__cabecera">
-                  <div>
-                    <p className="tarjeta-derivacion__paciente">
-                      {d.paciente_apellido}, {d.paciente_nombre}
-                    </p>
-                    <p className="tarjeta-derivacion__meta">
-                      DNI {d.paciente_dni} · desde <strong>{d.origen}</strong> · {cuandoFue(d.creado_en)}
-                    </p>
-                  </div>
-                  <span
-                    className={`estado-chip estado-chip--${
-                      d.prioridad === 'urgente' ? 'urgente' : 'curso'
-                    }`}
-                  >
-                    {d.prioridad === 'urgente' ? 'Urgente' : NOMBRE_DESTINO[d.destino] || d.destino}
-                  </span>
-                </div>
-
-                {d.motivo && <p className="tarjeta-derivacion__motivo">{d.motivo}</p>}
-
-                <div className="tarjeta-derivacion__pie">
-                  {d.cama_codigo ? (
-                    <span className="estado-chip estado-chip--libre">
-                      Cama {d.cama_codigo} · {String(d.cama_sector).replace('_', ' ')}
-                    </span>
-                  ) : (
-                    <span className="estado-chip estado-chip--pendiente">Sin cama asignada</span>
-                  )}
-                  <Boton variante="secundario" onClick={() => atender(d.id)}>
-                    Marcar atendida
-                  </Boton>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </TarjetaSeccion>
+      />
 
       <TarjetaSeccion
         titulo="Sala de guardia"
@@ -165,27 +112,6 @@ export default function DerivacionesEnfermeria() {
         )}
       </TarjetaSeccion>
 
-      {atendidas.length > 0 && (
-        <TarjetaSeccion titulo="Ya atendidas" subtitulo={`${atendidas.length} derivaciones cerradas`}>
-          <div className="lista-derivaciones lista-derivaciones--tenue">
-            {atendidas.slice(0, 8).map((d) => (
-              <article key={d.id} className="tarjeta-derivacion tarjeta-derivacion--atendida">
-                <div className="tarjeta-derivacion__cabecera">
-                  <div>
-                    <p className="tarjeta-derivacion__paciente">
-                      {d.paciente_apellido}, {d.paciente_nombre}
-                    </p>
-                    <p className="tarjeta-derivacion__meta">
-                      desde {d.origen} · {cuandoFue(d.creado_en)}
-                    </p>
-                  </div>
-                  <span className="estado-chip estado-chip--inactivo">Atendida</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </TarjetaSeccion>
-      )}
     </div>
   );
 }

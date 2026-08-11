@@ -759,3 +759,12 @@
   .tarjeta-derivacion__botones { width: 100%; }
   .tarjeta-derivacion__botones .boton { flex: 1; }
 }
+
+.aviso-atencion {
+  background: var(--estado-pendiente-fondo);
+  color: var(--estado-pendiente-texto);
+  border-left: 3px solid var(--estado-pendiente-punto);
+  padding: 11px 14px;
+  border-radius: var(--radio-sm);
+  font-size: 13.5px;
+}

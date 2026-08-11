@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+// Marcador de version: aparece en los logs de Render al arrancar.
+// Sirve para saber de un vistazo QUE codigo esta corriendo realmente,
+// sin tener que deducirlo de un numero de linea en un stack trace.
+const VERSION_BUILD = '2026-08-11 · guardia-NN + errores explicados';
+
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -73,7 +78,7 @@ app.get('/api/health', (req, res) => {
 
 // Ping liviano que NO toca la base: sirve para saber si el servicio de
 // Render ya desperto, antes de intentar el login.
-app.get('/api/ping', (req, res) => res.json({ ok: true, ts: Date.now() }));
+app.get('/api/ping', (req, res) => res.json({ ok: true, version: VERSION_BUILD, ts: Date.now() }));
 
 // Despierta tambien a Neon (que se autosuspende en el plan gratuito)
 // haciendo una consulta minima. El login lo llama antes de enviar

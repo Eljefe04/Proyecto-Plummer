@@ -503,3 +503,13 @@ CREATE INDEX IF NOT EXISTS idx_cirugias_estado      ON cirugias(estado);
 -- historia clinica. Se le crea una ficha temporal con DNI provisorio
 -- que despues se completa al identificarlo, igual que en un hospital real.
 ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS no_identificado BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- La restriccion original solo aceptaba 'pendiente' y 'recibida', asi que
+-- marcar una derivacion como atendida era rechazado por la base.
+ALTER TABLE derivaciones DROP CONSTRAINT IF EXISTS derivaciones_estado_check;
+ALTER TABLE derivaciones ADD CONSTRAINT derivaciones_estado_check
+  CHECK (estado IN ('pendiente','recibida','atendida'));
+
+ALTER TABLE derivaciones DROP CONSTRAINT IF EXISTS derivaciones_prioridad_check;
+ALTER TABLE derivaciones ADD CONSTRAINT derivaciones_prioridad_check
+  CHECK (prioridad IN ('normal','urgente'));
