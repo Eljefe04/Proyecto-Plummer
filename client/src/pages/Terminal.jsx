@@ -603,7 +603,11 @@ function TabDerivaciones({ medico, pacienteBuscado }) {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [destino, setDestino] = useState('');
   const [motivo, setMotivo] = useState('');
+  const [prioridad, setPrioridad] = useState('normal');
+  const [tipoCirugia, setTipoCirugia] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState('');
+  const [exito, setExito] = useState('');
 
   useEffect(() => { api.get('/pacientes/areas-derivacion').then(setAreas).catch(() => {}); }, []);
 
@@ -618,11 +622,28 @@ function TabDerivaciones({ medico, pacienteBuscado }) {
     e.preventDefault();
     if (!pacienteBuscado || !medico) return;
     setEnviando(true);
+    setError('');
     try {
-      await api.post('/derivaciones', { paciente_id: pacienteBuscado.id, origen: medico.especialidad, destino, motivo });
+      await api.post('/derivaciones', {
+        paciente_id: pacienteBuscado.id,
+        origen: medico.especialidad,
+        destino,
+        motivo,
+        prioridad,
+        // Al derivar a Cirugía se crea además la solicitud quirúrgica,
+        // que es lo que aparece en la bandeja de Quirófano.
+        tipo_cirugia: destino === 'cirugia' ? tipoCirugia : undefined,
+      });
       setModalAbierto(false);
-      setDestino(''); setMotivo('');
+      setExito(
+        destino === 'cirugia'
+          ? `Solicitud de cirugía enviada a Quirófano${prioridad === 'urgente' ? ' con carácter URGENTE' : ''}.`
+          : 'Derivación registrada.'
+      );
+      setDestino(''); setMotivo(''); setPrioridad('normal'); setTipoCirugia('');
       cargar();
+    } catch (err) {
+      setError(err.message);
     } finally {
       setEnviando(false);
     }
@@ -630,7 +651,8 @@ function TabDerivaciones({ medico, pacienteBuscado }) {
 
   return (
     <TarjetaSeccion titulo="Derivaciones" acciones={<Boton onClick={() => setModalAbierto(true)} disabled={!pacienteBuscado}>+ Nueva Derivación</Boton>}>
-      {!pacienteBuscado && <p className="ayuda-campo" style={{ marginBottom: 12 }}>Buscá un paciente arriba para derivarlo.</p>}
+      {!pacienteBuscado && <p className="ayuda-campo" style={{ marginBottom: 12 }}>Seleccioná un paciente desde su turno o desde las derivaciones recibidas.</p>}
+      {exito && <div className="aviso-exito" style={{ marginBottom: 12 }}>{exito}</div>}
       {derivaciones.length === 0 ? (
         <EstadoVacio texto="No hay derivaciones registradas." />
       ) : (
@@ -653,8 +675,31 @@ function TabDerivaciones({ medico, pacienteBuscado }) {
                 {areas.map((a) => <option key={a.valor} value={a.valor}>{a.label}</option>)}
               </select>
             </Campo>
+            {destino === 'cirugia' && (
+              <Campo label="Intervención solicitada">
+                <input
+                  required
+                  value={tipoCirugia}
+                  placeholder="Ej: Colecistectomía, Apendicectomía…"
+                  onChange={(e) => setTipoCirugia(e.target.value)}
+                />
+              </Campo>
+            )}
+            <Campo label="Prioridad">
+              <select value={prioridad} onChange={(e) => setPrioridad(e.target.value)}>
+                <option value="normal">Normal</option>
+                <option value="urgente">Urgente — se atiende primero</option>
+              </select>
+            </Campo>
             <Campo label="Motivo de derivación"><textarea rows={2} value={motivo} onChange={(e) => setMotivo(e.target.value)} /></Campo>
           </div>
+          {destino === 'cirugia' && (
+            <p className="ayuda-campo">
+              Al derivar a Cirugía se genera la solicitud quirúrgica: aparece en Quirófano para que
+              le asignen cirujano, anestesiólogo, quirófano y horario.
+            </p>
+          )}
+          {error && <p className="form-error">{error}</p>}
           <div className="form-acciones">
             <Boton variante="secundario" type="button" onClick={() => setModalAbierto(false)}>Cancelar</Boton>
             <Boton type="submit" disabled={enviando}>{enviando ? 'Derivando…' : 'Derivar Paciente'}</Boton>

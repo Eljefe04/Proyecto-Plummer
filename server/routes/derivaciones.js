@@ -100,6 +100,26 @@ router.post('/', async (req, res, next) => {
         VALUES (?,?,?,?,?,?,?)
       `).run(id, b.paciente_id, b.origen, b.destino, b.motivo || null, req.sesion.nombreCompleto, prioridad);
 
+      // ------------------------------------------------------------
+      // Derivar a Cirugia CREA la cirugia, no solo el registro de
+      // derivacion. Si es urgente, entra como tal y cae en el acto en
+      // la bandeja de Quirofano: esa es la "cirugia en el momento".
+      // ------------------------------------------------------------
+      if (b.destino === 'cirugia') {
+        await tx.prepare(`
+          INSERT INTO cirugias (id, paciente_id, tipo_cirugia, caracter, estado,
+                                solicitado_por_medico_id, notas_prequirurgicas)
+          VALUES (?,?,?,?,'solicitada',?,?)
+        `).run(
+          nuevoId(), b.paciente_id,
+          b.tipo_cirugia || 'A definir por Quirófano',
+          prioridad === 'urgente' ? 'urgente' : 'programada',
+          b.medico_a_cargo_id || req.sesion.medicoId || null,
+          b.motivo || null,
+        );
+        return { internacion: null, creoCirugia: true };
+      }
+
       if (!requiereCama(b.destino)) return { internacion: null };
 
       const internacion = await internarPaciente(tx, {
@@ -142,6 +162,9 @@ router.post('/', async (req, res, next) => {
     });
 
     emitirActualizacion({ destinos: [b.destino], recurso: 'derivaciones' });
+    if (resultado.creoCirugia) {
+      emitirActualizacion({ salas: ['rol:quirofano'], recurso: 'cirugias' });
+    }
     if (inter && inter.ok) {
       emitirActualizacion({
         salas: ['rol:enfermeria', 'rol:recepcion', 'rol:medico', 'rol:quirofano'],

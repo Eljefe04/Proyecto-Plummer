@@ -40,6 +40,9 @@ export default function Cirugia() {
   const [finalizando, setFinalizando] = useState(null);
   const [checklistDe, setChecklistDe] = useState(null);
   const [verParte, setVerParte] = useState(null);
+  const [creando, setCreando] = useState(false);
+  const [pacientes, setPacientes] = useState([]);
+  const [nueva, setNueva] = useState({ paciente_id: '', tipo_cirugia: '', caracter: 'programada' });
   const [form, setForm] = useState({});
   const [parte, setParte] = useState('');
   const [marcas, setMarcas] = useState({});
@@ -49,12 +52,14 @@ export default function Cirugia() {
 
   const cargar = useCallback(async () => {
     try {
-      const [c, m] = await Promise.all([
+      const [c, m, p] = await Promise.all([
         api.get('/quirofano/cirugias'),
         api.get('/medicos'),
+        api.get('/pacientes').catch(() => []),
       ]);
       setCirugias(c);
       setMedicos(m);
+      setPacientes(Array.isArray(p) ? p : (p.pacientes || []));
       setError('');
     } catch (err) {
       setError(err.message);
@@ -90,6 +95,22 @@ export default function Cirugia() {
       await api.patch(`/quirofano/cirugias/${programando.id}/programar`, form);
       destellar(programando.id);
       setProgramando(null);
+      cargar();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Quirófano también puede dar de alta una cirugía por su cuenta, sin
+  // esperar la solicitud de un médico (por ejemplo, una urgencia que
+  // entra directo o una intervención acordada por teléfono).
+  async function crearCirugia(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      await api.post('/quirofano/cirugias', { ...nueva, estado: 'solicitada' });
+      setCreando(false);
+      setNueva({ paciente_id: '', tipo_cirugia: '', caracter: 'programada' });
       cargar();
     } catch (err) {
       setError(err.message);
@@ -223,9 +244,14 @@ export default function Cirugia() {
       <TarjetaSeccion
         titulo="Solicitudes recibidas"
         subtitulo="Cirugías pedidas por los médicos, todavía sin programar"
-        acciones={solicitadas.length > 0 && (
-          <span className="estado-chip estado-chip--pendiente">{solicitadas.length} sin programar</span>
-        )}
+        acciones={
+          <div className="tarjeta-derivacion__botones">
+            {solicitadas.length > 0 && (
+              <span className="estado-chip estado-chip--pendiente">{solicitadas.length} sin programar</span>
+            )}
+            <Boton onClick={() => { setCreando(true); setError(''); }}>+ Nueva cirugía</Boton>
+          </div>
+        }
       >
         {solicitadas.length === 0 ? (
           <EstadoVacio texto="No hay solicitudes pendientes." />
@@ -269,6 +295,52 @@ export default function Cirugia() {
             )))}
           </div>
         </TarjetaSeccion>
+      )}
+
+      {creando && (
+        <Modal abierto ancho={560} titulo="Nueva cirugía" onCerrar={() => setCreando(false)}>
+          <form onSubmit={crearCirugia} className="formulario">
+            {error && <div className="aviso-error">{error}</div>}
+            <Campo label="Paciente">
+              <select
+                value={nueva.paciente_id}
+                onChange={(e) => setNueva({ ...nueva, paciente_id: e.target.value })}
+                required
+              >
+                <option value="">Seleccionar…</option>
+                {pacientes.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.apellido}, {p.nombre} — DNI {p.dni}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+
+            <Campo label="Intervención">
+              <input
+                value={nueva.tipo_cirugia}
+                placeholder="Ej: Colecistectomía"
+                onChange={(e) => setNueva({ ...nueva, tipo_cirugia: e.target.value })}
+                required
+              />
+            </Campo>
+
+            <Campo label="Carácter">
+              <select
+                value={nueva.caracter}
+                onChange={(e) => setNueva({ ...nueva, caracter: e.target.value })}
+              >
+                <option value="programada">Programada</option>
+                <option value="urgente">Urgente</option>
+              </select>
+            </Campo>
+
+            <div className="formulario__acciones">
+              <Boton variante="secundario" type="button" onClick={() => setCreando(false)}>Cancelar</Boton>
+              <Boton type="submit">Crear solicitud</Boton>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {programando && (
