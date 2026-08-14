@@ -49,11 +49,24 @@ router.post('/', requireRol('administrador', 'recepcion', 'quirofano'), async (r
       JSON.stringify(b.dias_atencion || [])
     );
 
-    const credencial = `${b.nombre} ${b.apellido}`.trim();
-    await db.prepare(`
-      INSERT INTO usuarios (id, usuario, password, rol, nombre_completo, medico_id)
-      VALUES (?, ?, ?, 'medico', ?, ?)
-    `).run(nuevoId(), credencial, credencial, credencial, id);
+    // ------------------------------------------------------------
+    // Los cirujanos y anestesiologos NO generan usuario de login.
+    //
+    // El login medico obliga a elegir una de las cuatro especialidades
+    // clinicas, asi que un usuario creado para cirugia nunca podria
+    // entrar: quedaria un usuario fantasma ocupando la credencial.
+    // Ellos trabajan bajo el acceso `quirofano`, que es donde se
+    // gestionan las cirugias y las fichas anestesicas.
+    // ------------------------------------------------------------
+    const ES_QUIRURGICA = ['cirugia', 'anestesiologia'].includes(b.especialidad);
+
+    if (!ES_QUIRURGICA) {
+      const credencial = `${b.nombre} ${b.apellido}`.trim();
+      await db.prepare(`
+        INSERT INTO usuarios (id, usuario, password, rol, nombre_completo, medico_id)
+        VALUES (?, ?, ?, 'medico', ?, ?)
+      `).run(nuevoId(), credencial, credencial, credencial, id);
+    }
 
     await registrarAuditoria({
       usuario: req.sesion.nombreCompleto,
@@ -64,7 +77,7 @@ router.post('/', requireRol('administrador', 'recepcion', 'quirofano'), async (r
     });
 
     const row = await db.prepare(`SELECT * FROM medicos WHERE id = ?`).get(id);
-    res.status(201).json(hidratar(row));
+    res.status(201).json({ ...hidratar(row), genera_acceso: !ES_QUIRURGICA });
   } catch (err) { next(err); }
 });
 

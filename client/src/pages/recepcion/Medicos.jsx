@@ -3,12 +3,27 @@ import { api } from '../../api';
 import Modal from '../../components/Modal';
 import { Badge, Boton, TarjetaSeccion, EstadoVacio, Campo } from '../../components/ui';
 
-const ESPECIALIDADES = [
+// Los clinicos atienden por consultorio y tienen terminal propia.
+// Los quirurgicos trabajan en el modulo Quirofano: no tienen agenda de
+// turnos ni usuario de login, pero SI matricula, porque son quienes
+// firman una cirugia o una ficha anestesica.
+const ESPECIALIDADES_CLINICAS = [
   { valor: 'obstetricia', label: 'Obstetricia' },
   { valor: 'cardiologia', label: 'Cardiología' },
   { valor: 'neurologia', label: 'Neurología' },
   { valor: 'pediatria', label: 'Pediatría' },
 ];
+
+const ESPECIALIDADES_QUIRURGICAS = [
+  { valor: 'cirugia', label: 'Cirugía' },
+  { valor: 'anestesiologia', label: 'Anestesiología' },
+];
+
+const ESPECIALIDADES = [...ESPECIALIDADES_CLINICAS, ...ESPECIALIDADES_QUIRURGICAS];
+
+function esQuirurgica(valor) {
+  return ESPECIALIDADES_QUIRURGICAS.some((e) => e.valor === valor);
+}
 const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 
 const MEDICO_VACIO = {
@@ -136,9 +151,21 @@ export default function Medicos() {
         {credencialCreada ? (
           <div>
             <p className="modal-advertencia" style={{ background: '#e1f5ee', borderColor: '#9fe1cb', color: '#0f6e56' }}>
-              Médico creado correctamente. Su acceso a la terminal de {ESPECIALIDADES.find((e) => e.valor === form.especialidad)?.label} ya está habilitado.
-              <br /><br />
-              <strong>Usuario y contraseña:</strong> {credencialCreada}
+              {esQuirurgica(form.especialidad) ? (
+                <>
+                  Profesional creado correctamente. Ya podés seleccionarlo al programar una cirugía
+                  desde el módulo <strong>Quirófano</strong>.
+                  <br /><br />
+                  No se genera usuario ni contraseña: los profesionales de quirófano trabajan bajo el
+                  acceso <strong>quirofano</strong>.
+                </>
+              ) : (
+                <>
+                  Médico creado correctamente. Su acceso a la terminal de {ESPECIALIDADES.find((e) => e.valor === form.especialidad)?.label} ya está habilitado.
+                  <br /><br />
+                  <strong>Usuario y contraseña:</strong> {credencialCreada}
+                </>
+              )}
             </p>
             <div className="form-acciones">
               <Boton onClick={() => setModalAbierto(false)}>Entendido</Boton>
@@ -153,14 +180,25 @@ export default function Medicos() {
               <Campo label="Matrícula *"><input required value={form.matricula} onChange={(e) => setForm({ ...form, matricula: e.target.value })} /></Campo>
               <Campo label="Especialidad *">
                 <select required value={form.especialidad} onChange={(e) => setForm({ ...form, especialidad: e.target.value })}>
-                  {ESPECIALIDADES.map((e) => <option key={e.valor} value={e.valor}>{e.label}</option>)}
+                  <optgroup label="Clínicas (atienden por consultorio)">
+                    {ESPECIALIDADES_CLINICAS.map((e) => <option key={e.valor} value={e.valor}>{e.label}</option>)}
+                  </optgroup>
+                  <optgroup label="Quirúrgicas (trabajan en Quirófano)">
+                    {ESPECIALIDADES_QUIRURGICAS.map((e) => <option key={e.valor} value={e.valor}>{e.label}</option>)}
+                  </optgroup>
                 </select>
               </Campo>
-              <Campo label="Consultorio"><input placeholder="Ej: Consultorio 1" value={form.consultorio} onChange={(e) => setForm({ ...form, consultorio: e.target.value })} /></Campo>
+              {!esQuirurgica(form.especialidad) && (
+                <Campo label="Consultorio"><input placeholder="Ej: Consultorio 1" value={form.consultorio} onChange={(e) => setForm({ ...form, consultorio: e.target.value })} /></Campo>
+              )}
               <Campo label="Teléfono"><input value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} /></Campo>
               <Campo label="Email"><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Campo>
             </div>
 
+            {/* Un cirujano o un anestesiologo no tienen agenda de turnos:
+                sus intervenciones se programan desde Quirofano. */}
+            {!esQuirurgica(form.especialidad) && (
+            <>
             <p className="form-subtitulo">Agenda del Médico</p>
             <div className="formulario-grid">
               <Campo label="Hora inicio"><input type="time" value={form.hora_inicio} onChange={(e) => setForm({ ...form, hora_inicio: e.target.value })} /></Campo>
@@ -182,10 +220,22 @@ export default function Medicos() {
                 ))}
               </div>
             </Campo>
+            </>
+            )}
 
             <p className="modal-advertencia" style={{ marginTop: 16 }}>
-              Al crear el médico, su acceso a la terminal de {ESPECIALIDADES.find((e) => e.valor === form.especialidad)?.label} se habilita automáticamente.
-              Usuario y contraseña = <strong>{form.nombre} {form.apellido}</strong>.
+              {esQuirurgica(form.especialidad) ? (
+                <>
+                  Los profesionales de {ESPECIALIDADES.find((e) => e.valor === form.especialidad)?.label} no
+                  tienen terminal propia ni agenda de turnos: quedan disponibles para seleccionarlos al
+                  programar una cirugía, desde el módulo <strong>Quirófano</strong>.
+                </>
+              ) : (
+                <>
+                  Al crear el médico, su acceso a la terminal de {ESPECIALIDADES.find((e) => e.valor === form.especialidad)?.label} se
+                  habilita automáticamente. Usuario y contraseña = <strong>{form.nombre} {form.apellido}</strong>.
+                </>
+              )}
             </p>
 
             {error && <p className="form-error">{error}</p>}
