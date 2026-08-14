@@ -104,7 +104,7 @@ router.get('/dispensaciones', requireRol('farmacia', 'administrador'), async (re
   } catch (err) { next(err); }
 });
 
-router.post('/dispensar', requireRol('farmacia', 'administrador'), async (req, res, next) => {
+router.post('/dispensar', requireRol('farmacia'), async (req, res, next) => {
   try {
     const b = req.body;
     if (!b.medicamento_id || !b.cantidad) {

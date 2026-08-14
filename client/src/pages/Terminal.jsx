@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import CampanaNotificaciones from '../components/CampanaNotificaciones';
 import BandejaDerivaciones from '../components/BandejaDerivaciones';
 import { TablaResultados } from './laboratorio/EstudiosLaboratorio';
+import HistoriaClinica from './terminal/HistoriaClinica';
 import { api } from '../api';
 import { useActualizacionTiempoReal } from '../hooks';
 import { Badge, Boton, TarjetaSeccion, EstadoVacio, Campo } from '../components/ui';
@@ -23,6 +24,7 @@ const ESPECIALIDAD_INFO = {
 
 const TABS = [
   { valor: 'recibidas', label: 'Derivaciones recibidas' },
+  { valor: 'hce', label: 'Historia clínica' },
   { valor: 'turnos', label: 'Turnos de Hoy' },
   { valor: 'estudios', label: 'Estudios' },
   { valor: 'recetas', label: 'Recetas Digitales' },
@@ -129,6 +131,9 @@ export default function Terminal() {
             subtitulo={`Pacientes derivados a ${ESPECIALIDAD_INFO[medico.especialidad]?.label || medico.especialidad}`}
             onSeleccionar={(p) => { setPacienteBuscado(p); setTab('especifico'); }}
           />
+        )}
+        {tab === 'hce' && (
+          <HistoriaClinica paciente={pacienteBuscado} medicoId={medico?.id} />
         )}
         {tab === 'turnos' && (
           <TabTurnos

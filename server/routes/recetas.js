@@ -35,9 +35,9 @@ router.get('/', async (req, res, next) => {
     const { paciente_id, medico_id, estado } = req.query;
     const rows = await db.prepare(`
       ${SELECT_RECETAS}
-      WHERE (? IS NULL OR r.paciente_id = ?)
-        AND (? IS NULL OR r.medico_id = ?)
-        AND (? IS NULL OR r.estado = ?)
+      WHERE (CAST(? AS TEXT) IS NULL OR r.paciente_id = ?)
+        AND (CAST(? AS TEXT) IS NULL OR r.medico_id = ?)
+        AND (CAST(? AS TEXT) IS NULL OR r.estado = ?)
       ORDER BY r.creado_en DESC
     `).all(
       paciente_id || null, paciente_id || null,
@@ -60,7 +60,7 @@ router.get('/pendientes', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/', requireRol('medico', 'quirofano', 'administrador'), async (req, res, next) => {
+router.post('/', requireRol('medico', 'quirofano'), async (req, res, next) => {
   try {
     const b = req.body;
     if (!b.paciente_id || !b.medicamento) {

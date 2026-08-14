@@ -133,7 +133,7 @@ router.post('/', requireRol('medico', 'recepcion', 'administrador'), async (req,
   } catch (err) { next(err); }
 });
 
-router.patch('/:id/estado', requireRol('imagenes', 'administrador'), async (req, res, next) => {
+router.patch('/:id/estado', requireRol('imagenes'), async (req, res, next) => {
   try {
     const { estado } = req.body;
     const validos = ['pendiente', 'en_sala', 'realizado', 'informado', 'entregado'];
@@ -152,7 +152,7 @@ router.patch('/:id/estado', requireRol('imagenes', 'administrador'), async (req,
 // La placa se guarda DENTRO de Postgres, no en disco: el disco de Render
 // es efimero y se borra en cada reinicio. El navegador la comprime antes
 // de subirla para que no ocupe de mas.
-router.patch('/:id/imagen', requireRol('imagenes', 'administrador'), async (req, res, next) => {
+router.patch('/:id/imagen', requireRol('imagenes'), async (req, res, next) => {
   try {
     const { imagen_datos } = req.body;
     if (!imagen_datos) return res.status(400).json({ error: 'No se recibio ninguna imagen' });
@@ -179,7 +179,7 @@ router.patch('/:id/imagen', requireRol('imagenes', 'administrador'), async (req,
   } catch (err) { next(err); }
 });
 
-router.patch('/:id/informe', requireRol('imagenes', 'administrador'), async (req, res, next) => {
+router.patch('/:id/informe', requireRol('imagenes'), async (req, res, next) => {
   try {
     const { informe } = req.body;
     const actual = await db.prepare(`SELECT * FROM estudios_imagenes WHERE id = ?`).get(req.params.id);

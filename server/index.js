@@ -3,7 +3,7 @@ require('dotenv').config();
 // Marcador de version: aparece en los logs de Render al arrancar.
 // Sirve para saber de un vistazo QUE codigo esta corriendo realmente,
 // sin tener que deducirlo de un numero de linea en un stack trace.
-const VERSION_BUILD = '2026-08-11 · quirofano + fix placas';
+const VERSION_BUILD = '2026-08-11 · HCE + anestesiologia + supervision admin';
 
 const express = require('express');
 const http = require('http');
@@ -32,6 +32,7 @@ const notificacionesRoutes = require('./routes/notificaciones');
 const auditoriaRoutes = require('./routes/auditoria');
 const dashboardRoutes = require('./routes/dashboard');
 const medicosHistoricosRoutes = require('./routes/medicos-historicos');
+const evolucionesRoutes = require('./routes/evoluciones');
 
 const app = express();
 const server = http.createServer(app);
@@ -71,6 +72,7 @@ app.use('/api/notificaciones', notificacionesRoutes);
 app.use('/api/auditoria', auditoriaRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/medicos-historicos', medicosHistoricosRoutes);
+app.use('/api/evoluciones', evolucionesRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, servicio: 'Proyecto Plummer', hora: new Date().toISOString() });

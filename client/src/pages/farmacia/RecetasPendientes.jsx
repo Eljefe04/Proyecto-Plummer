@@ -4,6 +4,17 @@ import Modal from '../../components/Modal';
 import { Boton, TarjetaSeccion, EstadoVacio, Campo } from '../../components/ui';
 import { useActualizacionTiempoReal, useDestelloActualizacion } from '../../hooks';
 
+/** Las alergias se guardan como lista JSON; se muestran legibles. */
+function textoAlergias(valor) {
+  if (!valor) return '';
+  try {
+    const l = typeof valor === 'string' ? JSON.parse(valor) : valor;
+    return Array.isArray(l) ? l.filter(Boolean).join(', ') : String(l);
+  } catch {
+    return String(valor);
+  }
+}
+
 function cuandoFue(iso) {
   if (!iso) return '';
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -86,7 +97,7 @@ export default function RecetasPendientes() {
   }
 
   const seleccionado = medicamentos.find((m) => m.id === medicamentoId);
-  const alergias = dispensando?.paciente_alergias;
+  const alergias = textoAlergias(dispensando?.paciente_alergias);
 
   return (
     <div className="pila-secciones">
@@ -133,8 +144,8 @@ export default function RecetasPendientes() {
                   )}
                 </div>
 
-                {r.paciente_alergias && (
-                  <p className="aviso-alergia">Alergias registradas: {r.paciente_alergias}</p>
+                {textoAlergias(r.paciente_alergias) && (
+                  <p className="aviso-alergia">Alergias registradas: {textoAlergias(r.paciente_alergias)}</p>
                 )}
 
                 <div className="tarjeta-derivacion__pie">

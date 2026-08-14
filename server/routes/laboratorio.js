@@ -147,7 +147,7 @@ router.post('/', requireRol('medico', 'recepcion', 'administrador'), async (req,
 
 // Estado intermedio: muestra tomada / en proceso. Antes el estudio
 // saltaba de "pendiente" a "realizado" sin nada en el medio.
-router.patch('/:id/estado', requireRol('laboratorio', 'administrador'), async (req, res, next) => {
+router.patch('/:id/estado', requireRol('laboratorio'), async (req, res, next) => {
   try {
     const { estado } = req.body;
     const validos = ['pendiente', 'muestra_tomada', 'en_proceso', 'realizado'];
@@ -163,7 +163,7 @@ router.patch('/:id/estado', requireRol('laboratorio', 'administrador'), async (r
   } catch (err) { next(err); }
 });
 
-router.patch('/:id/resultado', requireRol('laboratorio', 'administrador'), async (req, res, next) => {
+router.patch('/:id/resultado', requireRol('laboratorio'), async (req, res, next) => {
   try {
     const { resultado, valores } = req.body;
     const actual = await db.prepare(`SELECT * FROM estudios_laboratorio WHERE id = ?`).get(req.params.id);

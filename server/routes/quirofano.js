@@ -100,7 +100,7 @@ router.post('/cirugias', requireRol('medico', 'quirofano', 'administrador'), asy
 });
 
 // Programar: Quirofano asigna equipo, sala y horario.
-router.patch('/cirugias/:id/programar', requireRol('quirofano', 'administrador'), async (req, res, next) => {
+router.patch('/cirugias/:id/programar', requireRol('quirofano'), async (req, res, next) => {
   try {
     const b = req.body;
     const actual = await db.prepare('SELECT * FROM cirugias WHERE id = ?').get(req.params.id);
@@ -154,7 +154,7 @@ router.patch('/cirugias/:id/programar', requireRol('quirofano', 'administrador')
 });
 
 // Checklist de seguridad quirurgica de la OMS (pausa quirurgica).
-router.patch('/cirugias/:id/checklist', requireRol('quirofano', 'administrador'), async (req, res, next) => {
+router.patch('/cirugias/:id/checklist', requireRol('quirofano'), async (req, res, next) => {
   try {
     await db.prepare('UPDATE cirugias SET checklist_oms = ? WHERE id = ?')
       .run(JSON.stringify(req.body.checklist || {}), req.params.id);
@@ -169,7 +169,7 @@ router.patch('/cirugias/:id/checklist', requireRol('quirofano', 'administrador')
 // Antes esto era UNA linea: UPDATE cirugias SET estado. No tocaba camas,
 // ni al paciente, ni dejaba registro de que se hizo.
 // ------------------------------------------------------------
-router.patch('/cirugias/:id/estado', requireRol('quirofano', 'administrador'), async (req, res, next) => {
+router.patch('/cirugias/:id/estado', requireRol('quirofano'), async (req, res, next) => {
   try {
     const { estado, parte_quirurgico } = req.body;
     const validos = ['solicitada', 'programada', 'en_curso', 'finalizada', 'cancelada'];
@@ -276,8 +276,13 @@ router.patch('/cirugias/:id/estado', requireRol('quirofano', 'administrador'), a
 router.get('/fichas-anestesicas', async (req, res, next) => {
   try {
     const rows = await db.prepare(`
-      SELECT f.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido
-      FROM fichas_anestesicas f JOIN pacientes p ON p.id = f.paciente_id
+      SELECT f.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido,
+             c.tipo_cirugia, c.estado AS cirugia_estado, c.fecha_programada,
+             a.apellido AS anestesiologo_apellido
+      FROM fichas_anestesicas f
+      JOIN pacientes p      ON p.id = f.paciente_id
+      LEFT JOIN cirugias c  ON c.id = f.cirugia_id
+      LEFT JOIN medicos  a  ON a.id = c.anestesiologo_id
       ORDER BY f.creado_en DESC
     `).all();
     res.json(rows);
@@ -294,7 +299,7 @@ router.get('/cirugia-pendiente/:pacienteId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/fichas-anestesicas', requireRol('quirofano', 'administrador'), async (req, res, next) => {
+router.post('/fichas-anestesicas', requireRol('quirofano'), async (req, res, next) => {
   try {
     const b = req.body;
     if (!b.paciente_id) return res.status(400).json({ error: 'El paciente es obligatorio' });
@@ -320,7 +325,7 @@ router.post('/fichas-anestesicas', requireRol('quirofano', 'administrador'), asy
   } catch (err) { next(err); }
 });
 
-router.patch('/fichas-anestesicas/:id/drogas', requireRol('quirofano', 'administrador'), async (req, res, next) => {
+router.patch('/fichas-anestesicas/:id/drogas', requireRol('quirofano'), async (req, res, next) => {
   try {
     const { drogas_fluidos } = req.body;
     const ficha = await db.prepare(`SELECT * FROM fichas_anestesicas WHERE id = ?`).get(req.params.id);
@@ -345,7 +350,7 @@ router.patch('/fichas-anestesicas/:id/drogas', requireRol('quirofano', 'administ
   } catch (err) { next(err); }
 });
 
-router.patch('/fichas-anestesicas/:id/recuperacion', requireRol('quirofano', 'administrador'), async (req, res, next) => {
+router.patch('/fichas-anestesicas/:id/recuperacion', requireRol('quirofano'), async (req, res, next) => {
   try {
     const b = req.body;
     await db.prepare(`

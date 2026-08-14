@@ -112,7 +112,7 @@ router.get('/libres', async (req, res, next) => {
     const { sector } = req.query;
     const filas = await db.prepare(`
       SELECT * FROM camas
-      WHERE (? IS NULL OR sector = ?)
+      WHERE (CAST(? AS TEXT) IS NULL OR sector = ?)
       ORDER BY sector, codigo
     `).all(sector || null, sector || null);
     res.json(filas.map(hidratar).filter((c) => c.estado === 'libre'));

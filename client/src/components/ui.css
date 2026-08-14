@@ -942,3 +942,40 @@
   background: var(--estado-libre-fondo); border-color: var(--estado-libre-punto);
 }
 .grilla-campos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+
+/* ---------- Historia clínica unificada ---------- */
+.ficha-paciente {
+  display: flex; justify-content: space-between; align-items: center; gap: 14px;
+  background: linear-gradient(120deg, var(--plummer-azul-medio), var(--plummer-azul-oscuro, #0a2f5c));
+  color: #fff; border-radius: var(--radio-md); padding: 15px 19px;
+}
+.ficha-paciente__nombre { font-size: 19px; font-weight: 700; }
+.ficha-paciente__meta { font-size: 12.5px; opacity: 0.85; margin-top: 2px; }
+
+.linea-tiempo { position: relative; padding-left: 20px; display: grid; gap: 14px; }
+.linea-tiempo::before {
+  content: ''; position: absolute; left: 5px; top: 6px; bottom: 6px;
+  width: 2px; background: var(--borde-suave);
+}
+.hito { position: relative; }
+.hito__punto {
+  position: absolute; left: -19px; top: 6px; width: 11px; height: 11px;
+  border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--borde-suave);
+}
+.hito__punto--curso     { background: var(--estado-curso-punto); }
+.hito__punto--libre     { background: var(--estado-libre-punto); }
+.hito__punto--pendiente { background: var(--estado-pendiente-punto); }
+.hito__punto--urgente   { background: var(--estado-urgente-punto); }
+.hito__cuerpo {
+  background: var(--fondo-tarjeta); border: 1px solid var(--borde-suave);
+  border-radius: var(--radio-sm); padding: 12px 15px;
+}
+.hito__cabecera { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.hito__fecha { font-size: 11.5px; color: var(--texto-secundario); }
+.hito__autor { font-size: 12.5px; color: var(--texto-secundario); margin-top: 6px; }
+.hito__texto { font-size: 14px; margin-top: 3px; white-space: pre-wrap; }
+.hito__cuerpo .informe-texto { margin-top: 8px; font-size: 13px; }
+@media (max-width: 860px) {
+  .hito__cabecera { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .ficha-paciente { flex-direction: column; align-items: flex-start; }
+}

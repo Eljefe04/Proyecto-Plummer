@@ -34,9 +34,9 @@ router.get('/', async (req, res, next) => {
       FROM derivaciones d
       LEFT JOIN pacientes p ON p.id = d.paciente_id
       LEFT JOIN camas c     ON c.paciente_id = d.paciente_id
-      WHERE (? IS NULL OR d.paciente_id = ?)
-        AND (? IS NULL OR d.destino = ?)
-        AND (? IS NULL OR d.estado = ?)
+      WHERE (CAST(? AS TEXT) IS NULL OR d.paciente_id = ?)
+        AND (CAST(? AS TEXT) IS NULL OR d.destino = ?)
+        AND (CAST(? AS TEXT) IS NULL OR d.estado = ?)
       ORDER BY
         CASE WHEN d.prioridad = 'urgente' THEN 0 ELSE 1 END,
         d.creado_en DESC
